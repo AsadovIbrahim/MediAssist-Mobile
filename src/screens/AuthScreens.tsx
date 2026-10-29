@@ -78,7 +78,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
         <View className="rounded-2xl border border-line bg-surface p-5">
           <Field
             label="E-poçt"
-            placeholder="hekim@mediassist.az"
+            placeholder="E-poçt ünvanınızı daxil edin"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
@@ -87,7 +87,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
           />
           <Field
             label="Şifrə"
-            placeholder="••••••••"
+            placeholder="Şifrənizi daxil edin"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -188,16 +188,21 @@ export function RegisterScreen({ navigation }: RootScreenProps<'Register'>) {
         </Text>
 
         <View className="rounded-2xl border border-line bg-surface p-5">
-          <Field label="Ad *" placeholder="İbrahim" value={firstName} onChangeText={setFirstName} />
+          <Field
+            label="Ad *"
+            placeholder="Adınızı daxil edin"
+            value={firstName}
+            onChangeText={setFirstName}
+          />
           <Field
             label="Soyad *"
-            placeholder="Əliyev"
+            placeholder="Soyadınızı daxil edin"
             value={lastName}
             onChangeText={setLastName}
           />
           <Field
             label="E-poçt *"
-            placeholder="hekim@mediassist.az"
+            placeholder="E-poçt ünvanınızı daxil edin"
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
@@ -205,26 +210,26 @@ export function RegisterScreen({ navigation }: RootScreenProps<'Register'>) {
           />
           <Field
             label="Telefon *"
-            placeholder="+994 50 000 00 00"
+            placeholder="+994 XX XXX XX XX"
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
           />
           <Field
             label="İxtisas"
-            placeholder="Nevroloq, Terapevt..."
+            placeholder="İxtisasınızı qeyd edin"
             value={specialty}
             onChangeText={setSpecialty}
           />
           <Field
             label="İş yeri"
-            placeholder="Klinika / Xəstəxana"
+            placeholder="Çalışdığınız müəssisəni qeyd edin"
             value={workplace}
             onChangeText={setWorkplace}
           />
           <Field
             label="Şifrə *"
-            placeholder="Minimum 6 simvol"
+            placeholder="Şifrə təyin edin (min. 6 simvol)"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -498,7 +503,7 @@ export function ForgotPasswordScreen({
         <View className="rounded-2xl border border-line bg-surface p-5">
           <Field
             label="E-poçt"
-            placeholder="hekim@mediassist.az"
+            placeholder="E-poçt ünvanınızı daxil edin"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}

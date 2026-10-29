@@ -118,26 +118,26 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
 
         <Field
           label="Ad *"
-          placeholder="İbrahim"
+          placeholder="Pasiyentin adını daxil edin"
           value={firstName}
           onChangeText={setFirstName}
         />
         <Field
           label="Soyad *"
-          placeholder="Əliyev"
+          placeholder="Pasiyentin soyadını daxil edin"
           value={lastName}
           onChangeText={setLastName}
         />
         <Field
           label="Telefon *"
-          placeholder="+994 50 000 00 00"
+          placeholder="+994 XX XXX XX XX"
           keyboardType="phone-pad"
           value={phone}
           onChangeText={setPhone}
         />
         <Field
           label="Doğum ili"
-          placeholder="1995"
+          placeholder="Doğum ilini daxil edin"
           keyboardType="number-pad"
           value={birthYear}
           onChangeText={setBirthYear}
