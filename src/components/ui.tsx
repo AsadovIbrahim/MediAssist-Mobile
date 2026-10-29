@@ -1,0 +1,534 @@
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Keyboard,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  type ScrollViewProps,
+  type TextInputProps,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, Eye, EyeOff, Plus, Search, type LucideIcon } from 'lucide-react-native';
+import { colors, tints, type TintName } from '../theme';
+
+/* ------------------------------------------------------------------ */
+/* Keyboard handling (works with Android edge-to-edge & iOS)           */
+/* ------------------------------------------------------------------ */
+
+export function useKeyboard() {
+  const [height, setHeight] = useState(0);
+  const [topY, setTopY] = useState(() => Dimensions.get('window').height);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = Keyboard.addListener(showEvent, e => {
+      const winH = Dimensions.get('window').height;
+      const kbH = e.endCoordinates.height;
+      setHeight(kbH);
+      setTopY(e.endCoordinates.screenY || winH - kbH);
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => {
+      setHeight(0);
+      setTopY(Dimensions.get('window').height);
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
+  return { keyboardHeight: height, keyboardTopY: topY };
+}
+
+type ViewNode = React.ComponentRef<typeof View>;
+type ScrollNode = React.ComponentRef<typeof ScrollView>;
+
+const ScrollEnsureContext = createContext<((target: ViewNode | null) => void) | null>(null);
+
+/**
+ * Drop-in ScrollView for forms that shrinks above the keyboard and
+ * automatically scrolls any focused input into view.
+ */
+export function KeyboardScrollView({
+  children,
+  contentContainerStyle,
+  ...rest
+}: ScrollViewProps) {
+  const insets = useSafeAreaInsets();
+  const { keyboardHeight, keyboardTopY } = useKeyboard();
+  const scrollRef = useRef<ScrollNode>(null);
+  const scrollYRef = useRef(0);
+  const focusedRef = useRef<ViewNode | null>(null);
+
+  const ensureVisible = useCallback(
+    (target: ViewNode | null, kbTop = keyboardTopY) => {
+      if (!target) {
+        return;
+      }
+      target.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+        if (!h && !y) {
+          return;
+        }
+        const limit = kbTop - 28;
+        const bottom = y + Math.min(h, 160);
+        if (bottom > limit) {
+          const delta = bottom - limit;
+          scrollRef.current?.scrollTo({
+            y: Math.max(0, scrollYRef.current + delta),
+            animated: true,
+          });
+        }
+      });
+    },
+    [keyboardTopY],
+  );
+
+  // When the keyboard opens, scroll the currently focused field above it.
+  useEffect(() => {
+    if (keyboardHeight > 0 && focusedRef.current) {
+      const t = setTimeout(() => ensureVisible(focusedRef.current, keyboardTopY), 60);
+      return () => clearTimeout(t);
+    }
+  }, [keyboardHeight, keyboardTopY, ensureVisible]);
+
+  const registerFocus = useCallback(
+    (node: ViewNode | null) => {
+      focusedRef.current = node;
+      if (keyboardHeight > 0 && node) {
+        setTimeout(() => ensureVisible(node, keyboardTopY), 60);
+      }
+    },
+    [keyboardHeight, keyboardTopY, ensureVisible],
+  );
+
+  const extraBottom =
+    keyboardHeight > 0 ? Math.max(24, keyboardHeight - insets.bottom + 24) : 32;
+
+  return (
+    <ScrollEnsureContext.Provider value={registerFocus}>
+      <ScrollView
+        ref={scrollRef}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        onScroll={e => {
+          scrollYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
+        contentContainerStyle={[
+          { paddingBottom: extraBottom },
+          contentContainerStyle,
+        ]}
+        {...rest}>
+        {children}
+      </ScrollView>
+    </ScrollEnsureContext.Provider>
+  );
+}
+
+/**
+ * Container for screens with a fixed bottom input bar (e.g. AI chat)
+ * so the bottom bar lifts up above the keyboard.
+ */
+export function KeyboardLiftView({
+  children,
+  className = '',
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const insets = useSafeAreaInsets();
+  const { keyboardHeight } = useKeyboard();
+  const bottomOffset =
+    keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0;
+
+  return (
+    <View style={{ paddingBottom: bottomOffset }} className={`flex-1 ${className}`}>
+      {children}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Header                                                              */
+/* ------------------------------------------------------------------ */
+
+interface HeaderProps {
+  title: string;
+  /** Right side action, e.g. "+ Əlavə et" or "Saxla" */
+  right?: React.ReactNode;
+  back?: boolean;
+}
+
+export function ScreenHeader({ title, right, back = true }: HeaderProps) {
+  const navigation = useNavigation();
+  return (
+    <View className="flex-row items-center px-4 pt-2 pb-3">
+      {back && (
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={12}
+          className="mr-2 -ml-1 h-9 w-9 items-center justify-center rounded-full active:bg-field">
+          <ChevronLeft size={24} color={colors.text} />
+        </Pressable>
+      )}
+      <Text className="flex-1 text-lg font-bold text-ink" numberOfLines={1}>
+        {title}
+      </Text>
+      {right}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Buttons                                                             */
+/* ------------------------------------------------------------------ */
+
+interface ButtonProps {
+  label: string;
+  onPress?: () => void;
+  icon?: LucideIcon;
+  loading?: boolean;
+  disabled?: boolean;
+  variant?: 'primary' | 'soft' | 'danger' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
+export function Button({
+  label,
+  onPress,
+  icon: Icon,
+  loading,
+  disabled,
+  variant = 'primary',
+  size = 'md',
+  className = '',
+}: ButtonProps) {
+  const palette = {
+    primary: { bg: colors.primary, fg: '#fff' },
+    soft: { bg: colors.primarySoft, fg: colors.primary },
+    danger: { bg: colors.dangerSoft, fg: colors.danger },
+    ghost: { bg: 'transparent', fg: colors.primary },
+  }[variant];
+  const pad = { sm: 'px-3.5 py-2', md: 'px-4 py-2.5', lg: 'px-5 py-3.5' }[size];
+  const text = { sm: 'text-sm', md: 'text-sm', lg: 'text-base' }[size];
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={{ backgroundColor: palette.bg, opacity: disabled ? 0.5 : 1 }}
+      className={`flex-row items-center justify-center rounded-xl active:opacity-80 ${pad} ${className}`}>
+      {loading ? (
+        <ActivityIndicator size="small" color={palette.fg} />
+      ) : (
+        <>
+          {Icon && <Icon size={size === 'lg' ? 20 : 16} color={palette.fg} strokeWidth={2.4} />}
+          <Text
+            style={{ color: palette.fg }}
+            className={`font-semibold ${text} ${Icon ? 'ml-1.5' : ''}`}>
+            {label}
+          </Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+export function AddButton({ onPress, label = 'Əlavə et' }: { onPress: () => void; label?: string }) {
+  return <Button label={label} icon={Plus} onPress={onPress} size="sm" />;
+}
+
+/* ------------------------------------------------------------------ */
+/* Inputs                                                              */
+/* ------------------------------------------------------------------ */
+
+export function SearchBar(props: TextInputProps) {
+  return (
+    <View className="mx-4 mb-3 flex-row items-center rounded-xl bg-field px-3">
+      <Search size={18} color={colors.textLight} />
+      <TextInput
+        placeholderTextColor={colors.textLight}
+        returnKeyType="search"
+        className="ml-2 flex-1 py-3 text-[15px] text-ink"
+        {...props}
+      />
+    </View>
+  );
+}
+
+interface FieldProps extends TextInputProps {
+  label?: string;
+  error?: string;
+  counter?: number;
+}
+
+export function Field({
+  label,
+  error,
+  counter,
+  multiline,
+  value,
+  onFocus,
+  secureTextEntry,
+  ...rest
+}: FieldProps) {
+  const wrapRef = useRef<ViewNode>(null);
+  const ensureVisible = useContext(ScrollEnsureContext);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+
+  return (
+    <View ref={wrapRef} collapsable={false} className="mb-4">
+      {label && <Text className="mb-2 text-[15px] font-semibold text-ink">{label}</Text>}
+      {secureTextEntry ? (
+        <View
+          className={`flex-row items-center rounded-xl border bg-surface px-3.5 ${
+            error ? 'border-danger' : 'border-line'
+          }`}>
+          <TextInput
+            value={value}
+            secureTextEntry={!passwordVisible}
+            placeholderTextColor={colors.textLight}
+            autoCapitalize="none"
+            autoCorrect={false}
+            className="flex-1 py-3 text-[15px] text-ink"
+            maxLength={counter}
+            onFocus={e => {
+              ensureVisible?.(wrapRef.current);
+              onFocus?.(e);
+            }}
+            {...rest}
+          />
+          <Pressable
+            onPress={() => setPasswordVisible(prev => !prev)}
+            hitSlop={10}
+            className="ml-2 py-1 pl-1">
+            {passwordVisible ? (
+              <Eye size={20} color={colors.textMuted} />
+            ) : (
+              <EyeOff size={20} color={colors.textMuted} />
+            )}
+          </Pressable>
+        </View>
+      ) : (
+        <TextInput
+          value={value}
+          multiline={multiline}
+          placeholderTextColor={colors.textLight}
+          textAlignVertical={multiline ? 'top' : 'center'}
+          style={multiline ? { minHeight: 120 } : undefined}
+          className={`rounded-xl border bg-surface px-3.5 py-3 text-[15px] text-ink ${
+            error ? 'border-danger' : 'border-line'
+          }`}
+          maxLength={counter}
+          onFocus={e => {
+            ensureVisible?.(wrapRef.current);
+            onFocus?.(e);
+          }}
+          {...rest}
+        />
+      )}
+      {counter !== undefined && (
+        <Text className="mt-1 self-end text-xs text-ink-light">
+          {value?.length ?? 0}/{counter}
+        </Text>
+      )}
+      {error && <Text className="mt-1 text-xs text-danger">{error}</Text>}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Filter chips & segmented control                                    */
+/* ------------------------------------------------------------------ */
+
+export interface ChipOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+export function FilterChips<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: ChipOption<T>[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      className="mb-2 grow-0"
+      contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+      {options.map(o => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            onPress={() => onChange(o.value)}
+            className={`rounded-xl px-4 py-2 ${active ? 'bg-primary' : 'bg-field'}`}>
+            <Text className={`text-sm font-medium ${active ? 'text-white' : 'text-ink-muted'}`}>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: ChipOption<T>[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <View className="mb-5 flex-row gap-2">
+      {options.map(o => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            onPress={() => onChange(o.value)}
+            className={`flex-1 items-center rounded-xl py-2.5 ${
+              active ? 'bg-primary-soft' : 'bg-field'
+            }`}>
+            <Text
+              className={`text-sm ${active ? 'font-semibold text-primary' : 'text-ink-muted'}`}>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Misc                                                                */
+/* ------------------------------------------------------------------ */
+
+export function IconTile({
+  icon: Icon,
+  tint,
+  size = 48,
+  iconSize,
+  variant = 'tile',
+}: {
+  icon: LucideIcon;
+  tint: TintName;
+  size?: number;
+  iconSize?: number;
+  /** "tile" = darker tinted square (home cards), "soft" = light tinted square (lists) */
+  variant?: 'tile' | 'soft';
+}) {
+  const t = tints[tint];
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: variant === 'tile' ? t.tile : t.bg,
+        borderRadius: size * 0.28,
+      }}
+      className="items-center justify-center">
+      <Icon size={iconSize ?? size * 0.5} color={t.fg} strokeWidth={2} />
+    </View>
+  );
+}
+
+export function Card({
+  children,
+  onPress,
+  className = '',
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  className?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={{
+        shadowColor: '#101828',
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 1,
+      }}
+      className={`rounded-2xl border border-line bg-surface active:opacity-90 ${className}`}>
+      {children}
+    </Pressable>
+  );
+}
+
+export function Loading() {
+  return (
+    <View className="flex-1 items-center justify-center py-16">
+      <ActivityIndicator color={colors.primary} />
+    </View>
+  );
+}
+
+export function EmptyState({
+  icon: Icon,
+  title,
+  text,
+  action,
+}: {
+  icon: LucideIcon;
+  title: string;
+  text?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <View className="items-center px-8 py-16">
+      <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-field">
+        <Icon size={30} color={colors.textLight} />
+      </View>
+      <Text className="text-center text-base font-semibold text-ink">{title}</Text>
+      {text && <Text className="mt-1 text-center text-sm text-ink-muted">{text}</Text>}
+      {action && <View className="mt-5">{action}</View>}
+    </View>
+  );
+}
+
+export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <View className="mx-4 mb-3 rounded-xl bg-danger-soft p-3">
+      <Text className="text-sm text-danger">{message}</Text>
+      {onRetry && (
+        <Pressable onPress={onRetry} className="mt-2 self-start">
+          <Text className="text-sm font-semibold text-danger">Yenidən cəhd et</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+export function CountBadge({ count, tint }: { count: number; tint: TintName }) {
+  const t = tints[tint];
+  return (
+    <View style={{ backgroundColor: t.tile }} className="min-w-[26px] items-center rounded-lg px-2 py-0.5">
+      <Text style={{ color: t.fg }} className="text-xs font-bold">
+        {count}
+      </Text>
+    </View>
+  );
+}

@@ -25,13 +25,15 @@ DerivedData
 # Android/IntelliJ
 #
 build/
-.idea
-.gradle
+.idea/
+.vscode/
+.gradle/
 local.properties
 *.iml
 *.hprof
 .cxx/
 *.keystore
+*.jks
 !debug.keystore
 .kotlin/
 
@@ -43,11 +45,6 @@ yarn-error.log
 
 # fastlane
 #
-# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
-
 **/fastlane/report.xml
 **/fastlane/Preview.html
 **/fastlane/screenshots
@@ -73,3 +70,14 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Local environment, IPs, credentials & secrets (NEVER commit)
+.env
+.env.*
+!.env.example
+src/env.local.ts
+**/env.local.ts
+google-services.json
+GoogleService-Info.plist
+*.pem
+*.key
