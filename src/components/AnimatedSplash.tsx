@@ -228,7 +228,7 @@ export function AnimatedPulseLogo({
             top: 0,
             width: size,
             height: size,
-            opacity: 0.32,
+            opacity: 0.14,
           }}
           resizeMode="contain"
         />
