@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -99,40 +98,37 @@ export function RootNavigator() {
   const { ready, user } = useAuth();
   const [splashDone, setSplashDone] = useState(false);
 
+  if (!splashDone || !ready) {
+    return <AnimatedSplash ready={ready} onFinish={() => setSplashDone(true)} />;
+  }
+
   return (
-    <View style={{ flex: 1 }}>
-      {ready ? (
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-            {!user ? (
-              <>
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Register" component={RegisterScreen} />
-                <Stack.Screen name="OtpVerification" component={OtpVerificationScreen} />
-                <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                <Stack.Screen name="ResetPasswordOtp" component={ResetPasswordOtpScreen} />
-                <Stack.Screen name="ResetPasswordNew" component={ResetPasswordNewScreen} />
-              </>
-            ) : (
-              <>
-                <Stack.Screen name="Tabs" component={MainTabs} />
-                <Stack.Screen name="RecordList" component={RecordListScreen} />
-                <Stack.Screen name="RecordForm" component={RecordFormScreen} />
-                <Stack.Screen name="RecordDetail" component={RecordDetailScreen} />
-                <Stack.Screen name="Calendar" component={CalendarScreen} />
-                <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
-                <Stack.Screen name="Ai" component={AiScreen} />
-                <Stack.Screen name="Patients" component={PatientsScreen} />
-                <Stack.Screen name="PatientForm" component={PatientFormScreen} />
-              </>
-            )}
-          </Stack.Navigator>
-        </NavigationContainer>
-      ) : null}
-      {!splashDone ? (
-        <AnimatedSplash ready={ready} onFinish={() => setSplashDone(true)} />
-      ) : null}
-    </View>
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+        {!user ? (
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen name="OtpVerification" component={OtpVerificationScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPasswordOtp" component={ResetPasswordOtpScreen} />
+            <Stack.Screen name="ResetPasswordNew" component={ResetPasswordNewScreen} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="Tabs" component={MainTabs} />
+            <Stack.Screen name="RecordList" component={RecordListScreen} />
+            <Stack.Screen name="RecordForm" component={RecordFormScreen} />
+            <Stack.Screen name="RecordDetail" component={RecordDetailScreen} />
+            <Stack.Screen name="Calendar" component={CalendarScreen} />
+            <Stack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
+            <Stack.Screen name="Ai" component={AiScreen} />
+            <Stack.Screen name="Patients" component={PatientsScreen} />
+            <Stack.Screen name="PatientForm" component={PatientFormScreen} />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
