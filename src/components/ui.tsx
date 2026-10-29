@@ -176,8 +176,8 @@ export function ScreenHeader({ title, right, back = true }: HeaderProps) {
         <Pressable
           onPress={() => navigation.goBack()}
           hitSlop={12}
-          className="mr-2 -ml-1 h-9 w-9 items-center justify-center rounded-full active:bg-field">
-          <ChevronLeft size={24} color={colors.text} />
+          className="mr-3 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface active:bg-field">
+          <ChevronLeft size={22} color={colors.text} />
         </Pressable>
       )}
       <Text className="flex-1 text-lg font-bold text-ink" numberOfLines={1}>

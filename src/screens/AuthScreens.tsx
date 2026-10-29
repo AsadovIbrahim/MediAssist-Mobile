@@ -182,6 +182,13 @@ export function RegisterScreen({ navigation }: RootScreenProps<'Register'>) {
   return (
     <SafeAreaView className="flex-1 bg-canvas">
       <KeyboardScrollView className="px-6 py-6">
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={10}
+          className="mb-4 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface">
+          <ArrowLeft size={20} color={colors.text} />
+        </Pressable>
+
         <Text className="text-2xl font-bold text-ink">Həkim qeydiyyatı</Text>
         <Text className="mt-1 mb-6 text-sm text-ink-muted">
           Yeni hesab yaradaraq pasiyentlərinizi idarə edin
