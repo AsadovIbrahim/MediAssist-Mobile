@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   Pressable,
   Text,
   TextInput,
@@ -9,12 +10,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
-  HeartPulse,
   KeyRound,
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react-native';
+import appLogo from '../assets/logo.png';
 import { authApi } from '../api/services';
 import { Button, Field, KeyboardScrollView } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -62,9 +63,12 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
         className="px-6 py-8">
         <View className="mb-8 items-center">
-          <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-            <HeartPulse size={34} color="#fff" />
-          </View>
+          <Image
+            source={appLogo}
+            style={{ width: 76, height: 76, borderRadius: 18 }}
+            resizeMode="contain"
+            className="mb-4"
+          />
           <Text className="text-2xl font-bold text-ink">MediAssist</Text>
           <Text className="mt-1 text-center text-sm text-ink-muted">
             Şəxsi tibbi sənəd və müayinələrin idarə edilməsi
