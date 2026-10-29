@@ -52,6 +52,7 @@ function MainTabs() {
           paddingHorizontal: 8,
         },
         tabBarLabelStyle: {
+          fontFamily: 'RedditSans',
           fontSize: 11,
           fontWeight: '600',
           marginTop: 2,
