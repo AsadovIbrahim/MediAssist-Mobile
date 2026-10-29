@@ -26,9 +26,11 @@ const LETTERS = [
 export function AnimatedPulseLogo({
   size = 92,
   showRipples = true,
+  active = true,
 }: {
   size?: number;
   showRipples?: boolean;
+  active?: boolean;
 }) {
   const pulseProgress = useRef(new Animated.Value(0)).current;
   const heartBeat = useRef(new Animated.Value(1)).current;
@@ -36,16 +38,20 @@ export function AnimatedPulseLogo({
   const ripple2 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!active) {
+      return;
+    }
+
     // 1. ECG line sweep across the heart (100% useNativeDriver: true)
     const ecgLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseProgress, {
           toValue: 1,
-          duration: 950,
+          duration: 900,
           easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(350),
+        Animated.delay(320),
         Animated.timing(pulseProgress, {
           toValue: 0,
           duration: 0,
@@ -57,7 +63,7 @@ export function AnimatedPulseLogo({
     // 2. Realistic lub-dub heartbeat scale when the ECG wave hits the center R-peak
     const beatLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(280),
+        Animated.delay(260),
         Animated.timing(heartBeat, {
           toValue: 1.08,
           duration: 140,
@@ -82,17 +88,17 @@ export function AnimatedPulseLogo({
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(300),
+        Animated.delay(240),
       ]),
     );
 
     // 3. Expanding ripple rings
     const ripple1Loop = Animated.loop(
       Animated.sequence([
-        Animated.delay(300),
+        Animated.delay(280),
         Animated.timing(ripple1, {
           toValue: 1,
-          duration: 900,
+          duration: 860,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -101,16 +107,16 @@ export function AnimatedPulseLogo({
           duration: 0,
           useNativeDriver: true,
         }),
-        Animated.delay(100),
+        Animated.delay(80),
       ]),
     );
 
     const ripple2Loop = Animated.loop(
       Animated.sequence([
-        Animated.delay(480),
+        Animated.delay(450),
         Animated.timing(ripple2, {
           toValue: 1,
-          duration: 820,
+          duration: 770,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -135,10 +141,8 @@ export function AnimatedPulseLogo({
       ripple1Loop.stop();
       ripple2Loop.stop();
     };
-  }, [heartBeat, pulseProgress, ripple1, ripple2, showRipples]);
+  }, [active, heartBeat, pulseProgress, ripple1, ripple2, showRipples]);
 
-  // Counter-translateX trick: wrapper shifts from -0.78*size to 0 while child shifts from +0.78*size to 0.
-  // The child image stays completely stationary on screen while the wrapper's right edge reveals the ECG wave left-to-right!
   const sweepDist = size * 0.78;
   const wrapperTranslateX = pulseProgress.interpolate({
     inputRange: [0, 1],
@@ -206,6 +210,7 @@ export function AnimatedPulseLogo({
       ) : null}
 
       <Animated.View
+        collapsable={false}
         style={{
           width: size,
           height: size,
@@ -222,6 +227,7 @@ export function AnimatedPulseLogo({
 
         {/* Native-driver progressive left-to-right reveal of the glowing ECG line */}
         <Animated.View
+          collapsable={false}
           style={{
             position: 'absolute',
             left: 0,
@@ -248,7 +254,8 @@ export function AnimatedPulseLogo({
 
 /**
  * Full-screen Netflix-style letter-by-letter reveal + parallel live ECG pulse splash screen.
- * Runs 100% on the Native UI thread (useNativeDriver: true) so it never freezes during JS startup.
+ * Waits until `ready` is true and the background screen has finished mounting BEFORE starting
+ * the animation, so there is zero frame drop or freeze mid-animation.
  */
 export function AnimatedSplash({
   ready,
@@ -257,14 +264,13 @@ export function AnimatedSplash({
   ready: boolean;
   onFinish: () => void;
 }) {
-  const logoIntroScale = useRef(new Animated.Value(0.86)).current;
-  const logoIntroOpacity = useRef(new Animated.Value(0)).current;
+  const [animStarted, setAnimStarted] = React.useState(false);
 
   // Per-letter animations (Netflix style: opacity + scale + translateY, all useNativeDriver: true)
   const letterAnims = useRef(
     LETTERS.map(() => ({
       opacity: new Animated.Value(0),
-      scale: new Animated.Value(1.6),
+      scale: new Animated.Value(1.55),
       translateY: new Animated.Value(14),
     })),
   ).current;
@@ -278,135 +284,111 @@ export function AnimatedSplash({
   const containerOpacity = useRef(new Animated.Value(1)).current;
   const containerScale = useRef(new Animated.Value(1)).current;
 
-  const readyRef = useRef(ready);
-  readyRef.current = ready;
   const onFinishRef = useRef(onFinish);
   onFinishRef.current = onFinish;
+  const startedRef = useRef(false);
 
-  const minTimeDone = useRef(false);
-  const exitStarted = useRef(false);
-
-  const runExitIfReady = React.useCallback(() => {
-    if (!minTimeDone.current || !readyRef.current || exitStarted.current) {
+  useEffect(() => {
+    if (!ready || startedRef.current) {
       return;
     }
-    exitStarted.current = true;
-    Animated.parallel([
-      Animated.timing(containerOpacity, {
-        toValue: 0,
-        duration: 340,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(containerScale, {
-        toValue: 1.06,
-        duration: 340,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onFinishRef.current();
-    });
-  }, [containerOpacity, containerScale]);
+    startedRef.current = true;
 
-  // Run intro animations strictly ONCE on mount
-  useEffect(() => {
-    // 1. Logo smooth entrance
-    Animated.parallel([
-      Animated.timing(logoIntroOpacity, {
-        toValue: 1,
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.spring(logoIntroScale, {
-        toValue: 1,
-        friction: 7,
-        tension: 70,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Wait 180ms after `ready` becomes true so NavigationContainer & initial screen
+    // finish mounting on the native UI thread BEFORE the animation begins!
+    const startTimer = setTimeout(() => {
+      setAnimStarted(true);
 
-    // 2. Netflix-style staggered letter-by-letter animation ("MediAssist")
-    const letterSequences = letterAnims.map((anim, index) =>
-      Animated.sequence([
-        Animated.delay(180 + index * 85),
-        Animated.parallel([
-          Animated.timing(anim.opacity, {
-            toValue: 1,
-            duration: 260,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.spring(anim.scale, {
-            toValue: 1,
-            friction: 6,
-            tension: 95,
-            useNativeDriver: true,
-          }),
-          Animated.timing(anim.translateY, {
-            toValue: 0,
-            duration: 260,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-        ]),
-      ]),
-    );
-
-    // 3. Parallel lower ECG line sweep & subtitle reveal (100% useNativeDriver: true)
-    const waveAndSubtitle = Animated.sequence([
-      Animated.delay(260),
-      Animated.parallel([
-        Animated.timing(bottomWaveCoverX, {
-          toValue: 220,
-          duration: 1050,
-          easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: true,
-        }),
+      // 1. Netflix-style staggered letter-by-letter animation ("MediAssist")
+      const letterSequences = letterAnims.map((anim, index) =>
         Animated.sequence([
-          Animated.delay(580),
+          Animated.delay(index * 80),
           Animated.parallel([
-            Animated.timing(subtitleOpacity, {
+            Animated.timing(anim.opacity, {
               toValue: 1,
-              duration: 380,
+              duration: 240,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
-            Animated.timing(subtitleTranslateY, {
+            Animated.spring(anim.scale, {
+              toValue: 1,
+              friction: 6,
+              tension: 95,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim.translateY, {
               toValue: 0,
-              duration: 380,
+              duration: 240,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
           ]),
         ]),
-      ]),
-    ]);
+      );
 
-    Animated.parallel([...letterSequences, waveAndSubtitle]).start();
+      // 2. Parallel lower ECG line sweep & subtitle reveal
+      const waveAndSubtitle = Animated.sequence([
+        Animated.delay(80),
+        Animated.parallel([
+          Animated.timing(bottomWaveCoverX, {
+            toValue: 220,
+            duration: 980,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.sequence([
+            Animated.delay(520),
+            Animated.parallel([
+              Animated.timing(subtitleOpacity, {
+                toValue: 1,
+                duration: 360,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+              }),
+              Animated.timing(subtitleTranslateY, {
+                toValue: 0,
+                duration: 360,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+              }),
+            ]),
+          ]),
+        ]),
+      ]);
 
-    const timer = setTimeout(() => {
-      minTimeDone.current = true;
-      runExitIfReady();
-    }, 2200);
+      // Run letter reveal + wave, then pause briefly and smoothly fade out
+      Animated.sequence([
+        Animated.parallel([...letterSequences, waveAndSubtitle]),
+        Animated.delay(650),
+        Animated.parallel([
+          Animated.timing(containerOpacity, {
+            toValue: 0,
+            duration: 320,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(containerScale, {
+            toValue: 1.05,
+            duration: 320,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start(() => {
+        onFinishRef.current();
+      });
+    }, 180);
 
-    return () => clearTimeout(timer);
+    return () => clearTimeout(startTimer);
   }, [
     bottomWaveCoverX,
+    containerOpacity,
+    containerScale,
     letterAnims,
-    logoIntroOpacity,
-    logoIntroScale,
-    runExitIfReady,
+    ready,
     subtitleOpacity,
     subtitleTranslateY,
   ]);
-
-  useEffect(() => {
-    if (ready) {
-      runExitIfReady();
-    }
-  }, [ready, runExitIfReady]);
 
   return (
     <Animated.View
@@ -418,14 +400,9 @@ export function AnimatedSplash({
         },
       ]}>
       {/* Centered Pulsing Logo with Live ECG Heartbeat */}
-      <Animated.View
-        style={{
-          opacity: logoIntroOpacity,
-          transform: [{ scale: logoIntroScale }],
-          marginBottom: 24,
-        }}>
-        <AnimatedPulseLogo size={110} showRipples />
-      </Animated.View>
+      <View style={{ marginBottom: 24 }}>
+        <AnimatedPulseLogo size={110} showRipples active={animStarted} />
+      </View>
 
       {/* Netflix-style Letter-by-Letter "MediAssist" Reveal */}
       <View style={styles.wordRow}>
@@ -449,7 +426,7 @@ export function AnimatedSplash({
       </View>
 
       {/* Parallel Sweeping Cardiogram Line under MediAssist */}
-      <View style={styles.waveWrapper}>
+      <View collapsable={false} style={styles.waveWrapper}>
         <Svg width={220} height={28} viewBox="0 0 220 28">
           <Defs>
             <LinearGradient id="ecgGrad" x1="0%" y1="0%" x2="100%" y2="0%">
