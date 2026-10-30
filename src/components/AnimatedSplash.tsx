@@ -20,123 +20,54 @@ const LETTERS = [
 
 /**
  * 100% Native-Driver animated logo:
- * - Keeps a subtle ECG baseline visible so the heart never looks blank on frame 1
- * - Sweeps the bright glowing ECG pulse across the heart at 60fps on the Native UI thread
- * - Performs a realistic lub-dub heartbeat scale & expanding ripple rings in parallel
+ * - Only the ECG pulse line inside the heart animates at a slow, calm rhythm
+ * - The shield & heart stay completely still (no heartbeat scale or outer ripples)
  */
 export function AnimatedPulseLogo({
   size = 92,
-  showRipples = true,
 }: {
   size?: number;
   showRipples?: boolean;
 }) {
   const pulseProgress = useRef(new Animated.Value(0)).current;
-  const heartBeat = useRef(new Animated.Value(1)).current;
-  const ripple1 = useRef(new Animated.Value(0)).current;
-  const ripple2 = useRef(new Animated.Value(0)).current;
+  const pulseOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // 1. ECG line sweep across the heart (100% useNativeDriver: true)
+    // Slow, calm ECG line sweep across the heart (no scale/heartbeat)
     const ecgLoop = Animated.loop(
       Animated.sequence([
+        Animated.timing(pulseOpacity, {
+          toValue: 1,
+          duration: 0,
+          useNativeDriver: true,
+        }),
         Animated.timing(pulseProgress, {
           toValue: 1,
-          duration: 850,
-          easing: Easing.inOut(Easing.cubic),
+          duration: 1850,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.delay(550),
+        Animated.timing(pulseOpacity, {
+          toValue: 0,
+          duration: 450,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseProgress, {
+          toValue: 0,
+          duration: 0,
           useNativeDriver: true,
         }),
         Animated.delay(250),
-        Animated.timing(pulseProgress, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    // 2. Realistic lub-dub heartbeat scale when the ECG wave hits the center R-peak
-    const beatLoop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(220),
-        Animated.timing(heartBeat, {
-          toValue: 1.08,
-          duration: 135,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartBeat, {
-          toValue: 0.98,
-          duration: 105,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartBeat, {
-          toValue: 1.05,
-          duration: 125,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartBeat, {
-          toValue: 1,
-          duration: 315,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.delay(200),
-      ]),
-    );
-
-    // 3. Expanding ripple rings
-    const ripple1Loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(240),
-        Animated.timing(ripple1, {
-          toValue: 1,
-          duration: 800,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(ripple1, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.delay(60),
-      ]),
-    );
-
-    const ripple2Loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(400),
-        Animated.timing(ripple2, {
-          toValue: 1,
-          duration: 700,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(ripple2, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
       ]),
     );
 
     ecgLoop.start();
-    beatLoop.start();
-    if (showRipples) {
-      ripple1Loop.start();
-      ripple2Loop.start();
-    }
-
     return () => {
       ecgLoop.stop();
-      beatLoop.stop();
-      ripple1Loop.stop();
-      ripple2Loop.stop();
     };
-  }, [heartBeat, pulseProgress, ripple1, ripple2, showRipples]);
+  }, [pulseOpacity, pulseProgress]);
 
   const sweepDist = size * 0.78;
   const wrapperTranslateX = pulseProgress.interpolate({
@@ -151,118 +82,65 @@ export function AnimatedPulseLogo({
   const borderRadius = Math.round(size * 0.22);
 
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {showRipples ? (
-        <>
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.rippleRing,
-              {
-                width: size,
-                height: size,
-                borderRadius,
-                opacity: ripple1.interpolate({
-                  inputRange: [0, 0.2, 1],
-                  outputRange: [0, 0.36, 0],
-                }),
-                transform: [
-                  {
-                    scale: ripple1.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 1.45],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.rippleRing,
-              {
-                width: size,
-                height: size,
-                borderRadius,
-                borderColor: '#38BDF8',
-                opacity: ripple2.interpolate({
-                  inputRange: [0, 0.2, 1],
-                  outputRange: [0, 0.26, 0],
-                }),
-                transform: [
-                  {
-                    scale: ripple2.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 1.28],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-        </>
-      ) : null}
+    <View
+      collapsable={false}
+      style={{
+        width: size,
+        height: size,
+        borderRadius,
+        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      {/* Base Layer: Shield + Heart */}
+      <Image
+        source={logoClean}
+        style={{ width: size, height: size }}
+        resizeMode="contain"
+      />
+      {/* Subtle ECG baseline trace */}
+      <Image
+        source={logoFull}
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: size,
+          height: size,
+          opacity: 0.16,
+        }}
+        resizeMode="contain"
+      />
 
+      {/* Slow, calm left-to-right sweep of the glowing ECG line */}
       <Animated.View
         collapsable={false}
         style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
           width: size,
           height: size,
-          borderRadius,
           overflow: 'hidden',
-          transform: [{ scale: heartBeat }],
+          opacity: pulseOpacity,
+          transform: [{ translateX: wrapperTranslateX }],
         }}>
-        {/* Base Layer: Shield + Heart */}
-        <Image
-          source={logoClean}
-          style={{ width: size, height: size }}
-          resizeMode="contain"
-        />
-        {/* Subtle ECG trace so the heart never looks blank before the bright sweep passes */}
-        <Image
+        <Animated.Image
           source={logoFull}
           style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
             width: size,
             height: size,
-            opacity: 0.14,
+            transform: [{ translateX: childTranslateX }],
           }}
           resizeMode="contain"
         />
-
-        {/* Native-driver progressive left-to-right bright sweep of the glowing ECG line */}
-        <Animated.View
-          collapsable={false}
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: size,
-            height: size,
-            overflow: 'hidden',
-            transform: [{ translateX: wrapperTranslateX }],
-          }}>
-          <Animated.Image
-            source={logoFull}
-            style={{
-              width: size,
-              height: size,
-              transform: [{ translateX: childTranslateX }],
-            }}
-            resizeMode="contain"
-          />
-        </Animated.View>
       </Animated.View>
     </View>
   );
 }
 
 /**
- * Full-screen Netflix-style letter-by-letter reveal + parallel live ECG pulse splash screen.
- * Runs completely standalone BEFORE NavigationContainer mounts, so there is 0ms lag at start or mid-animation.
+ * Full-screen Netflix-style letter-by-letter reveal + parallel slow ECG pulse splash screen.
  */
 export function AnimatedSplash({
   ready,
@@ -301,14 +179,14 @@ export function AnimatedSplash({
   }, []);
 
   useEffect(() => {
-    // 1. Netflix-style staggered letter-by-letter animation ("MediAssist") starting immediately at 0ms
+    // 1. Netflix-style staggered letter-by-letter animation ("MediAssist")
     const letterSequences = letterAnims.map((anim, index) =>
       Animated.sequence([
-        Animated.delay(index * 80),
+        Animated.delay(index * 85),
         Animated.parallel([
           Animated.timing(anim.opacity, {
             toValue: 1,
-            duration: 240,
+            duration: 260,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }),
@@ -320,7 +198,7 @@ export function AnimatedSplash({
           }),
           Animated.timing(anim.translateY, {
             toValue: 0,
-            duration: 240,
+            duration: 260,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }),
@@ -330,26 +208,26 @@ export function AnimatedSplash({
 
     // 2. Parallel lower ECG line sweep & subtitle reveal
     const waveAndSubtitle = Animated.sequence([
-      Animated.delay(60),
+      Animated.delay(80),
       Animated.parallel([
         Animated.timing(bottomWaveCoverX, {
           toValue: 220,
-          duration: 950,
-          easing: Easing.inOut(Easing.cubic),
+          duration: 1350,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.sequence([
-          Animated.delay(480),
+          Animated.delay(550),
           Animated.parallel([
             Animated.timing(subtitleOpacity, {
               toValue: 1,
-              duration: 340,
+              duration: 380,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
             Animated.timing(subtitleTranslateY, {
               toValue: 0,
-              duration: 340,
+              duration: 380,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
@@ -360,7 +238,7 @@ export function AnimatedSplash({
 
     Animated.sequence([
       Animated.parallel([...letterSequences, waveAndSubtitle]),
-      Animated.delay(550),
+      Animated.delay(650),
     ]).start(() => {
       animDoneRef.current = true;
       completeIfReady();
@@ -381,9 +259,9 @@ export function AnimatedSplash({
 
   return (
     <View style={styles.splashContainer}>
-      {/* Centered Pulsing Logo with Live ECG Heartbeat */}
+      {/* Centered Logo with Calm Slow ECG Pulse Only */}
       <View style={{ marginBottom: 24 }}>
-        <AnimatedPulseLogo size={110} showRipples />
+        <AnimatedPulseLogo size={110} />
       </View>
 
       {/* Netflix-style Letter-by-Letter "MediAssist" Reveal */}
@@ -460,12 +338,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  rippleRing: {
-    position: 'absolute',
-    borderWidth: 2,
-    borderColor: '#1E6FD9',
-    backgroundColor: 'rgba(30, 111, 217, 0.06)',
   },
   wordRow: {
     flexDirection: 'row',
