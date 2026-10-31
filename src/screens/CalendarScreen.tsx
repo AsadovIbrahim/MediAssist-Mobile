@@ -42,6 +42,7 @@ import {
   toApiDate,
 } from '../utils/format';
 import { useFocusData } from '../utils/hooks';
+import { cancelAppointmentNotification, syncUpcomingAppointments } from '../utils/notifications';
 
 export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
   const { patient } = usePatient();
@@ -61,7 +62,9 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
     }
     const start = new Date(month.getFullYear(), month.getMonth(), 1, 0, 0, 0);
     const end = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59);
-    return appointmentsApi.range(patient.id, toApiDate(start), toApiDate(end));
+    const list = await appointmentsApi.range(patient.id, toApiDate(start), toApiDate(end));
+    syncUpcomingAppointments(list);
+    return list;
   }, [patient?.id, month.getFullYear(), month.getMonth()]);
 
   const markers = useMemo(() => {
@@ -89,6 +92,7 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
         style: 'destructive',
         onPress: async () => {
           try {
+            await cancelAppointmentNotification(item.id);
             await appointmentsApi.remove(item.id);
             await reload();
           } catch (e) {
@@ -109,7 +113,7 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
       <ScreenHeader
-        title="Təqvim və müayinələr"
+        title="Təqvim"
         right={
           <AddButton
             onPress={() =>
@@ -141,15 +145,15 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
         </Card>
 
         <View className="mt-5 mb-3 flex-row items-center justify-between px-5">
-          <Text className="text-base font-bold text-ink">{sectionLabel}</Text>
+          <Text className="text-[18px] font-bold text-ink">{sectionLabel}</Text>
           <CountBadge count={dayItems.length} tint="blue" />
         </View>
 
         {dayItems.length === 0 ? (
           <EmptyState
             icon={CalendarIcon}
-            title="Bu tarixdə müayinə yoxdur"
-            text="Yeni müayinə və ya laboratoriya görüşü əlavə edə bilərsiniz."
+            title="Bu tarixdə görüş yoxdur"
+            text="Yeni görüş və ya xatırlatma əlavə edə bilərsiniz."
           />
         ) : (
           dayItems.map(item => {
@@ -163,23 +167,26 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
               item.location || item.doctorSpecialty || item.notes || item.doctorName || '';
 
             return (
-              <Card key={item.id} className="mx-4 mb-3 flex-row items-center px-4 py-3.5">
-                <Text className="w-14 text-[15px] font-bold text-ink">
+              <Card key={item.id} className="mx-4 mb-3.5 flex-row items-center px-4 py-4">
+                <Text className="w-16 text-[16px] font-bold text-ink">
                   {formatTime(item.dateTime)}
                 </Text>
-                <IconTile icon={visual.icon} tint={visual.tint} size={42} variant="soft" />
-                <View className="ml-3 flex-1">
-                  <Text className="text-[15px] font-semibold text-ink" numberOfLines={1}>
+                <IconTile icon={visual.icon} tint={visual.tint} size={50} iconSize={24} variant="soft" />
+                <View className="ml-3.5 flex-1">
+                  <Text className="text-[17px] font-bold text-ink" numberOfLines={1}>
                     {item.title}
                   </Text>
                   {!!subtitle && (
-                    <Text className="mt-0.5 text-xs text-ink-muted" numberOfLines={1}>
+                    <Text className="mt-1 text-[14px] font-medium text-ink-muted" numberOfLines={1}>
                       {subtitle}
                     </Text>
                   )}
                 </View>
-                <Pressable onPress={() => onMenu(item)} hitSlop={10} className="p-1">
-                  <MoreVertical size={18} color={colors.textMuted} />
+                <Pressable
+                  onPress={() => onMenu(item)}
+                  hitSlop={12}
+                  className="h-10 w-10 items-center justify-center rounded-xl bg-field active:bg-line">
+                  <MoreVertical size={20} color={colors.textMuted} />
                 </Pressable>
               </Card>
             );

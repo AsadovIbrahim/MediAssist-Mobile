@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ExternalLink, FileText, Plus, Trash2 } from 'lucide-react-native';
+import { ExternalLink, FileText, Pencil, Plus, Trash2 } from 'lucide-react-native';
 import { fileUrl } from '../api/client';
 import type { FileItem } from '../api/types';
 import { ImageViewer, openRemoteFile, VoicePlayer } from '../components/media';
@@ -117,35 +117,43 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
       <ScreenHeader
         title={cfg.singular}
         right={
-          <Pressable
-            onPress={confirmDelete}
-            hitSlop={10}
-            className="h-9 w-9 items-center justify-center rounded-xl bg-danger-soft">
-            <Trash2 size={18} color={colors.danger} />
-          </Pressable>
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={() => navigation.navigate('RecordForm', { kind, id: item.id })}
+              hitSlop={12}
+              className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft active:opacity-70">
+              <Pencil size={20} color={colors.primary} />
+            </Pressable>
+            <Pressable
+              onPress={confirmDelete}
+              hitSlop={12}
+              className="h-11 w-11 items-center justify-center rounded-2xl bg-danger-soft active:opacity-70">
+              <Trash2 size={20} color={colors.danger} />
+            </Pressable>
+          </View>
         }
       />
 
       <ScrollView className="flex-1 px-4 pt-2" contentContainerStyle={{ paddingBottom: 32 }}>
-        <Card className="p-4">
+        <Card className="p-4.5">
           <View className="flex-row items-center">
-            <IconTile icon={icon} tint={tint} size={48} variant="soft" />
-            <View className="ml-3 flex-1">
-              <Text className="text-lg font-bold text-ink">{item.title}</Text>
-              <Text className="mt-0.5 text-xs text-ink-muted">
+            <IconTile icon={icon} tint={tint} size={54} iconSize={26} variant="soft" />
+            <View className="ml-3.5 flex-1">
+              <Text className="text-[20px] font-bold text-ink">{item.title}</Text>
+              <Text className="mt-1 text-[14px] font-medium text-ink-muted">
                 {formatDate(item.date)} • {kindLabel}
               </Text>
             </View>
           </View>
 
           {!!item.description && (
-            <Text className="mt-4 text-[15px] leading-6 text-ink">{item.description}</Text>
+            <Text className="mt-4 text-[16px] leading-7 text-ink">{item.description}</Text>
           )}
         </Card>
 
         {images.length > 0 && (
           <View className="mt-5">
-            <Text className="mb-2.5 text-[15px] font-semibold text-ink">
+            <Text className="mb-3 text-[17px] font-bold text-ink">
               Şəkillər ({images.length})
             </Text>
             <View className="flex-row flex-wrap gap-2.5">

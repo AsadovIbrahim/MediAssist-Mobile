@@ -2,24 +2,23 @@ import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
+  Pressable,
   RefreshControl,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { ExternalLink, FileText, Mic } from 'lucide-react-native';
+import { ChevronRight, Eye, FileText, Mic } from 'lucide-react-native';
 import { fileUrl } from '../api/client';
 import type { FileItem } from '../api/types';
-import { openRemoteFile, VoicePlayer } from '../components/media';
+import { ImageViewer, openRemoteFile, VoicePlayer } from '../components/media';
 import {
   Card,
   EmptyState,
   ErrorBanner,
-  FilterChips,
   Loading,
   SearchBar,
-  type ChipOption,
 } from '../components/ui';
 import { usePatient } from '../context/PatientContext';
 import { RECORDS, type RecordKind } from '../features/records';
@@ -27,15 +26,6 @@ import { colors, tints } from '../theme';
 import { formatDate, formatSize } from '../utils/format';
 import { useFocusData } from '../utils/hooks';
 import { docLabel, isAudioFile, isImageFile } from '../utils/media';
-
-type Filter = 'all' | 'doc' | 'image' | 'audio';
-
-const FILTERS: ChipOption<Filter>[] = [
-  { value: 'all', label: 'Hamısı' },
-  { value: 'doc', label: 'Sənədlər' },
-  { value: 'image', label: 'Şəkillər' },
-  { value: 'audio', label: 'Səs qeydləri' },
-];
 
 interface AggregatedFile {
   file: FileItem;
@@ -48,8 +38,8 @@ interface AggregatedFile {
 export function DocumentsScreen() {
   const navigation = useNavigation();
   const { patient } = usePatient();
-  const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   const {
     data: allFiles,
@@ -61,8 +51,9 @@ export function DocumentsScreen() {
     if (!patient) {
       return [];
     }
-    const [complaints, diagnoses, treatments] = await Promise.all([
+    const [complaints, examinations, diagnoses, treatments] = await Promise.all([
       RECORDS.complaint.api.list(patient.id),
+      RECORDS.examination.api.list(patient.id),
       RECORDS.diagnosis.api.list(patient.id),
       RECORDS.treatment.api.list(patient.id),
     ]);
@@ -80,6 +71,7 @@ export function DocumentsScreen() {
         }
       }
     };
+    collect('examination', examinations);
     collect('diagnosis', diagnoses);
     collect('treatment', treatments);
     collect('complaint', complaints);
@@ -88,24 +80,34 @@ export function DocumentsScreen() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (allFiles ?? []).filter(({ file, recordTitle }) => {
-      if (filter === 'image' && !isImageFile(file)) {
-        return false;
-      }
-      if (filter === 'audio' && !isAudioFile(file)) {
-        return false;
-      }
-      if (filter === 'doc' && (isImageFile(file) || isAudioFile(file))) {
-        return false;
-      }
-      if (q) {
-        return (
-          file.fileName.toLowerCase().includes(q) || recordTitle.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [allFiles, filter, search]);
+    if (!q) {
+      return allFiles ?? [];
+    }
+    return (allFiles ?? []).filter(
+      ({ file, recordTitle }) =>
+        file.fileName.toLowerCase().includes(q) || recordTitle.toLowerCase().includes(q),
+    );
+  }, [allFiles, search]);
+
+  const imageList = useMemo(() => {
+    return (filtered ?? [])
+      .filter(item => isImageFile(item.file))
+      .map(item => ({
+        uri: fileUrl(item.file.filePath) ?? '',
+        fileId: item.file.id,
+      }))
+      .filter(x => !!x.uri);
+  }, [filtered]);
+
+  const openImage = (file: FileItem) => {
+    const targetUri = fileUrl(file.filePath);
+    const idx = imageList.findIndex(x => x.fileId === file.id || x.uri === targetUri);
+    if (idx !== -1) {
+      setViewerIndex(idx);
+    } else if (targetUri) {
+      setViewerIndex(0);
+    }
+  };
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
@@ -118,8 +120,6 @@ export function DocumentsScreen() {
         value={search}
         onChangeText={setSearch}
       />
-
-      <FilterChips options={FILTERS} value={filter} onChange={setFilter} />
 
       {error && <ErrorBanner message={error} onRetry={reload} />}
 
@@ -138,49 +138,91 @@ export function DocumentsScreen() {
             const isImg = isImageFile(file);
             const isAud = isAudioFile(file);
             const badge = docLabel(file);
+
             return (
               <Card
-                onPress={() =>
-                  isAud
-                    ? navigation.navigate('RecordDetail', { kind, id: recordId })
-                    : openRemoteFile(file)
-                }
-                className="mx-4 mb-3 p-3.5">
+                onPress={() => {
+                  if (isImg) {
+                    openImage(file);
+                  } else {
+                    navigation.navigate('RecordDetail', { kind, id: recordId });
+                  }
+                }}
+                className="mx-4 mb-3.5 p-4">
                 <View className="flex-row items-center">
                   {isImg ? (
-                    <Image
-                      source={{ uri: fileUrl(file.filePath) }}
-                      style={{ width: 46, height: 46, borderRadius: 10 }}
-                    />
+                    <Pressable
+                      onPress={() => openImage(file)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel="Şəkli tam ekranda aç"
+                      className="relative overflow-hidden rounded-2xl border border-line active:opacity-80">
+                      <Image
+                        source={{ uri: fileUrl(file.filePath) }}
+                        style={{ width: 56, height: 56 }}
+                        resizeMode="cover"
+                      />
+                      <View className="absolute bottom-1 right-1 rounded-md bg-black/60 p-1">
+                        <Eye size={12} color="#fff" strokeWidth={2.4} />
+                      </View>
+                    </Pressable>
                   ) : isAud ? (
                     <View
                       style={{ backgroundColor: tints.green.bg }}
-                      className="h-11 w-11 items-center justify-center rounded-xl">
-                      <Mic size={20} color={tints.green.fg} />
+                      className="h-14 w-14 items-center justify-center rounded-2xl">
+                      <Mic size={26} color={tints.green.fg} />
                     </View>
                   ) : (
                     <View
                       style={{
                         backgroundColor: badge === 'PDF' ? tints.red.bg : tints.blue.bg,
                       }}
-                      className="h-11 w-11 items-center justify-center rounded-xl">
+                      className="h-14 w-14 items-center justify-center rounded-2xl">
                       <FileText
-                        size={20}
+                        size={26}
                         color={badge === 'PDF' ? tints.red.fg : tints.blue.fg}
                       />
                     </View>
                   )}
-                  <View className="ml-3 flex-1">
-                    <Text className="text-[15px] font-semibold text-ink" numberOfLines={1}>
+
+                  <View className="ml-3.5 flex-1 justify-center">
+                    <Text className="text-[17px] font-bold text-ink" numberOfLines={1}>
                       {recordTitle}
                     </Text>
-                    <Text className="mt-0.5 text-xs text-ink-muted" numberOfLines={1}>
+                    <Text
+                      className="mt-1 text-[14px] font-medium text-ink-muted"
+                      numberOfLines={1}>
                       {file.fileName} • {formatSize(file.fileSize)} • {formatDate(recordDate)}
                     </Text>
                   </View>
-                  <ExternalLink size={16} color={colors.textLight} />
+
+                  <View className="ml-2 flex-row items-center gap-1.5">
+                    {isImg && (
+                      <Pressable
+                        onPress={() => openImage(file)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Şəkli böyüt"
+                        className="h-11 w-11 items-center justify-center rounded-xl bg-primary-soft active:opacity-70">
+                        <Eye size={20} color={colors.primary} strokeWidth={2.2} />
+                      </Pressable>
+                    )}
+                    <Pressable
+                      onPress={() => navigation.navigate('RecordDetail', { kind, id: recordId })}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Qeydə bax"
+                      className="h-11 w-11 items-center justify-center rounded-xl bg-surface active:opacity-70">
+                      <ChevronRight size={22} color={colors.textLight} strokeWidth={2.4} />
+                    </Pressable>
+                  </View>
                 </View>
-                {isAud && <VoicePlayer uri={fileUrl(file.filePath)} />}
+
+                {isAud && (
+                  <View className="mt-3">
+                    <VoicePlayer uri={fileUrl(file.filePath)} fallbackLabel={formatSize(file.fileSize)} />
+                  </View>
+                )}
               </Card>
             );
           }}
@@ -188,12 +230,17 @@ export function DocumentsScreen() {
             <EmptyState
               icon={FileText}
               title="Sənəd tapılmadı"
-              text="Şikayət, diaqnoz və müalicələrə əlavə edilən bütün fayllar burada görünəcək."
+              text="Şikayət, müayinə, diaqnoz və müalicələrə əlavə edilən bütün fayllar burada görünəcək."
             />
           }
         />
       )}
+
+      <ImageViewer
+        uris={imageList.map(x => x.uri)}
+        index={viewerIndex}
+        onClose={() => setViewerIndex(null)}
+      />
     </SafeAreaView>
   );
 }
-

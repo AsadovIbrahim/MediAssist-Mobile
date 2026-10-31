@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -22,6 +22,7 @@ import { usePatient } from '../context/PatientContext';
 import type { RootScreenProps } from '../navigation/types';
 import { colors } from '../theme';
 import { formatDateLong, parseDate, toApiDate } from '../utils/format';
+import { requestNotificationPermission, scheduleAppointmentNotification } from '../utils/notifications';
 
 const TYPES: ChipOption<AppointmentType>[] = [
   { value: 'DoctorVisit', label: 'Həkim müayinəsi' },
@@ -46,6 +47,10 @@ export function AppointmentFormScreen({
   const [notes, setNotes] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
 
   const onTypeChange = (next: AppointmentType) => {
     setType(next);
@@ -73,7 +78,7 @@ export function AppointmentFormScreen({
 
     setSaving(true);
     try {
-      await appointmentsApi.create({
+      const created = await appointmentsApi.create({
         patientId: patient.id,
         title: title.trim(),
         location: location.trim() || null,
@@ -81,6 +86,17 @@ export function AppointmentFormScreen({
         notes: notes.trim() || null,
         type,
       });
+
+      // Schedule notification reminder for this appointment
+      if (created?.id) {
+        await scheduleAppointmentNotification({
+          id: created.id,
+          title: created.title,
+          patientName: patient ? `${patient.firstName} ${patient.lastName}` : null,
+          dateTime: created.dateTime,
+        });
+      }
+
       await refreshPatients();
       navigation.goBack();
     } catch (e) {
@@ -93,7 +109,7 @@ export function AppointmentFormScreen({
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
       <ScreenHeader
-        title="Yeni müayinə"
+        title="Yeni görüş"
         right={<Button label="Saxla" size="sm" loading={saving} onPress={onSave} />}
       />
 
@@ -114,13 +130,14 @@ export function AppointmentFormScreen({
           onChangeText={setLocation}
         />
 
-        <View className="mb-4">
-          <Text className="mb-2 text-[15px] font-semibold text-ink">Tarix</Text>
+        <View className="mb-5">
+          <Text className="mb-2 text-[16px] font-bold text-ink">Tarix</Text>
           <Pressable
             onPress={() => setShowPicker(true)}
-            className="flex-row items-center justify-between rounded-xl border border-line bg-surface px-3.5 py-3">
-            <Text className="text-[15px] text-ink">{formatDateLong(date)}</Text>
-            <Calendar size={18} color={colors.textMuted} />
+            hitSlop={10}
+            className="flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3.5">
+            <Text className="text-[16px] font-semibold text-ink">{formatDateLong(date)}</Text>
+            <Calendar size={22} color={colors.textMuted} />
           </Pressable>
         </View>
 
@@ -131,15 +148,16 @@ export function AppointmentFormScreen({
           onChangeText={setTime}
         />
 
-        <View className="-mt-2 mb-4 flex-row flex-wrap gap-2">
+        <View className="-mt-2 mb-5 flex-row flex-wrap gap-2.5">
           {QUICK_TIMES.map(t => (
             <Pressable
               key={t}
               onPress={() => setTime(t)}
-              className={`rounded-lg px-3 py-1.5 ${
+              hitSlop={6}
+              className={`rounded-xl px-4 py-2.5 ${
                 time === t ? 'bg-primary' : 'bg-field'
               }`}>
-              <Text className={`text-xs font-medium ${time === t ? 'text-white' : 'text-ink-muted'}`}>
+              <Text className={`text-[14px] font-bold ${time === t ? 'text-white' : 'text-ink'}`}>
                 {t}
               </Text>
             </Pressable>
@@ -153,6 +171,15 @@ export function AppointmentFormScreen({
           value={notes}
           onChangeText={setNotes}
         />
+
+        <View className="mt-2 mb-8">
+          <Button
+            label="Yadda saxla"
+            size="lg"
+            loading={saving}
+            onPress={onSave}
+          />
+        </View>
       </KeyboardScrollView>
 
       <DatePickerModal

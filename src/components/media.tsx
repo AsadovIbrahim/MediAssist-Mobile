@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  ChevronLeft,
+  ChevronRight,
   FileText,
   Mic,
   Pause,
@@ -149,29 +151,78 @@ export function ImageViewer({
   index: number | null;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [current, setCurrent] = useState(index ?? 0);
   useEffect(() => {
     if (index !== null) {
       setCurrent(index);
     }
   }, [index]);
+
+  if (index === null || !uris.length) {
+    return null;
+  }
+
+  const activeUri = uris[current] || uris[0];
+
   return (
     <Modal visible={index !== null} transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1 bg-black">
+        {/* Top bar with close button */}
         <Pressable
           onPress={onClose}
-          className="absolute right-4 top-12 z-10 h-10 w-10 items-center justify-center rounded-full bg-white/20">
-          <X size={22} color="#fff" />
+          hitSlop={12}
+          style={{ top: Math.max(insets.top, 16) + 6 }}
+          accessibilityRole="button"
+          accessibilityLabel="Bağla"
+          className="absolute right-4 z-20 h-12 w-12 items-center justify-center rounded-full bg-white/25 active:bg-white/40">
+          <X size={26} color="#fff" strokeWidth={2.5} />
         </Pressable>
+
+        {/* Center image view */}
         <Pressable
-          className="flex-1"
-          onPress={() => setCurrent(c => (uris.length ? (c + 1) % uris.length : 0))}>
-          <Image source={{ uri: uris[current] }} resizeMode="contain" style={{ flex: 1 }} />
+          className="flex-1 items-center justify-center"
+          onPress={() => uris.length > 1 && setCurrent(c => (c + 1) % uris.length)}>
+          <Image
+            source={{ uri: activeUri }}
+            resizeMode="contain"
+            style={{ width: '100%', height: '100%' }}
+          />
         </Pressable>
+
+        {/* Previous navigation button */}
         {uris.length > 1 && (
-          <Text className="absolute bottom-10 self-center text-sm text-white/80">
-            {current + 1} / {uris.length}
-          </Text>
+          <Pressable
+            onPress={() => setCurrent(c => (c > 0 ? c - 1 : uris.length - 1))}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Əvvəlki şəkil"
+            className="absolute left-3 top-1/2 z-20 -mt-6 h-12 w-12 items-center justify-center rounded-full bg-white/25 active:bg-white/40">
+            <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
+          </Pressable>
+        )}
+
+        {/* Next navigation button */}
+        {uris.length > 1 && (
+          <Pressable
+            onPress={() => setCurrent(c => (c + 1) % uris.length)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Növbəti şəkil"
+            className="absolute right-3 top-1/2 z-20 -mt-6 h-12 w-12 items-center justify-center rounded-full bg-white/25 active:bg-white/40">
+            <ChevronRight size={28} color="#fff" strokeWidth={2.5} />
+          </Pressable>
+        )}
+
+        {/* Counter pill */}
+        {uris.length > 1 && (
+          <View
+            style={{ bottom: Math.max(insets.bottom, 16) + 12 }}
+            className="absolute self-center rounded-full bg-white/20 px-4 py-1.5">
+            <Text className="text-[15px] font-bold text-white">
+              {current + 1} / {uris.length}
+            </Text>
+          </View>
         )}
       </View>
     </Modal>

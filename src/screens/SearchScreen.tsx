@@ -21,6 +21,7 @@ type Scope = 'all' | RecordKind;
 const SCOPES: ChipOption<Scope>[] = [
   { value: 'all', label: 'Hamısı' },
   { value: 'complaint', label: 'Şikayətlər' },
+  { value: 'examination', label: 'Müayinələr' },
   { value: 'diagnosis', label: 'Diaqnoz' },
   { value: 'treatment', label: 'Müalicə' },
 ];
@@ -43,13 +44,15 @@ export function SearchScreen() {
       return [];
     }
     const q = debounced.trim() || undefined;
-    const [complaints, diagnoses, treatments] = await Promise.all([
+    const [complaints, examinations, diagnoses, treatments] = await Promise.all([
       RECORDS.complaint.api.list(patient.id, undefined, q),
+      RECORDS.examination.api.list(patient.id, undefined, q),
       RECORDS.diagnosis.api.list(patient.id, undefined, q),
       RECORDS.treatment.api.list(patient.id, undefined, q),
     ]);
     return [
       ...complaints.map(item => ({ kind: 'complaint' as const, item })),
+      ...examinations.map(item => ({ kind: 'examination' as const, item })),
       ...diagnoses.map(item => ({ kind: 'diagnosis' as const, item })),
       ...treatments.map(item => ({ kind: 'treatment' as const, item })),
     ];
@@ -93,6 +96,12 @@ export function SearchScreen() {
               item={row.item}
               onPress={() =>
                 navigation.navigate('RecordDetail', {
+                  kind: row.kind,
+                  id: row.item.id,
+                })
+              }
+              onEdit={() =>
+                navigation.navigate('RecordForm', {
                   kind: row.kind,
                   id: row.item.id,
                 })

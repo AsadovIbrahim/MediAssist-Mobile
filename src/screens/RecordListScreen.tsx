@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, RefreshControl, View } from 'react-native';
+import { FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FileText } from 'lucide-react-native';
 import { RecordCard } from '../components/RecordCard';
@@ -8,13 +8,12 @@ import {
   Button,
   EmptyState,
   ErrorBanner,
-  FilterChips,
   Loading,
   ScreenHeader,
   SearchBar,
 } from '../components/ui';
 import { usePatient } from '../context/PatientContext';
-import { ALL_FILTER, RECORDS } from '../features/records';
+import { RECORDS } from '../features/records';
 import type { RootScreenProps } from '../navigation/types';
 import { useDebounced, useFocusData } from '../utils/hooks';
 
@@ -22,7 +21,6 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   const { kind } = route.params;
   const cfg = RECORDS[kind];
   const { patient } = usePatient();
-  const [filter, setFilter] = useState<string>(ALL_FILTER);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounced(search);
 
@@ -38,10 +36,10 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     }
     return cfg.api.list(
       patient.id,
-      filter === ALL_FILTER ? undefined : filter,
+      undefined,
       debouncedSearch.trim() || undefined,
     );
-  }, [patient?.id, kind, filter, debouncedSearch]);
+  }, [patient?.id, kind, debouncedSearch]);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
@@ -60,8 +58,6 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         onChangeText={setSearch}
       />
 
-      <FilterChips options={cfg.filters} value={filter} onChange={setFilter} />
-
       {error && <ErrorBanner message={error} onRetry={reload} />}
 
       {loading ? (
@@ -79,6 +75,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
               kind={kind}
               item={item}
               onPress={() => navigation.navigate('RecordDetail', { kind, id: item.id })}
+              onEdit={() => navigation.navigate('RecordForm', { kind, id: item.id })}
             />
           )}
           ListEmptyComponent={

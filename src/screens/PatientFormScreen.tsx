@@ -7,15 +7,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Camera } from 'lucide-react-native';
+import { Camera, Image as ImageIcon } from 'lucide-react-native';
 import { fileUrl } from '../api/client';
 import { patientsApi } from '../api/services';
 import type { LocalFile } from '../api/types';
 import { Button, Field, KeyboardScrollView, ScreenHeader } from '../components/ui';
 import { usePatient } from '../context/PatientContext';
 import type { RootScreenProps } from '../navigation/types';
-import { tints } from '../theme';
-import { pickImages } from '../utils/media';
+import { colors, tints } from '../theme';
+import { pickImages, takePhoto } from '../utils/media';
 
 export function PatientFormScreen({ navigation, route }: RootScreenProps<'PatientForm'>) {
   const editId = route.params?.id;
@@ -41,11 +41,26 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
     }
   }, [existing]);
 
-  const choosePhoto = async () => {
+  const handleCamera = async () => {
+    const taken = await takePhoto();
+    if (taken[0]) {
+      setPhoto(taken[0]);
+    }
+  };
+
+  const handleGallery = async () => {
     const picked = await pickImages(1);
     if (picked[0]) {
       setPhoto(picked[0]);
     }
+  };
+
+  const choosePhoto = () => {
+    Alert.alert('Pasiyent şəkli', 'Şəkli necə əlavə etmək istəyirsiniz?', [
+      { text: 'Kamera ilə çək', onPress: handleCamera },
+      { text: 'Qalereyadan seç', onPress: handleGallery },
+      { text: 'Ləğv et', style: 'cancel' },
+    ]);
   };
 
   const onSave = async () => {
@@ -82,7 +97,7 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
 
       await refresh();
       await select(saved.id);
-      navigation.navigate('Tabs', { screen: 'Home' });
+      navigation.navigate('PatientDashboard');
     } catch (e) {
       Alert.alert('Xəta', (e as Error).message);
     } finally {
@@ -100,21 +115,37 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
       />
 
       <KeyboardScrollView className="flex-1 px-4 pt-3">
-        <Pressable onPress={choosePhoto} className="mb-5 items-center self-center">
-          {previewUri ? (
-            <Image
-              source={{ uri: previewUri }}
-              style={{ width: 84, height: 84, borderRadius: 42 }}
-            />
-          ) : (
-            <View
-              style={{ backgroundColor: tints.blue.bg }}
-              className="h-20 w-20 items-center justify-center rounded-full">
-              <Camera size={28} color={tints.blue.fg} />
-            </View>
-          )}
-          <Text className="mt-2 text-xs font-semibold text-primary">Şəkil seç</Text>
-        </Pressable>
+        <View className="mb-6 items-center self-center">
+          <Pressable onPress={choosePhoto} className="items-center">
+            {previewUri ? (
+              <Image
+                source={{ uri: previewUri }}
+                style={{ width: 96, height: 96, borderRadius: 48 }}
+              />
+            ) : (
+              <View
+                style={{ backgroundColor: tints.blue.bg }}
+                className="h-24 w-24 items-center justify-center rounded-full border-2 border-line">
+                <Camera size={36} color={tints.blue.fg} />
+              </View>
+            )}
+          </Pressable>
+
+          <View className="mt-3.5 flex-row items-center gap-3">
+            <Pressable
+              onPress={handleCamera}
+              className="flex-row items-center rounded-2xl bg-primary-soft px-4 py-2.5 active:opacity-80">
+              <Camera size={18} color={colors.primary} />
+              <Text className="ml-2 text-[14px] font-bold text-primary">Kamera ilə çək</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleGallery}
+              className="flex-row items-center rounded-2xl border border-line bg-surface px-4 py-2.5 active:opacity-80 shadow-sm">
+              <ImageIcon size={18} color={colors.textMuted} />
+              <Text className="ml-2 text-[14px] font-bold text-ink">Qalereya</Text>
+            </Pressable>
+          </View>
+        </View>
 
         <Field
           label="Ad *"
@@ -137,7 +168,7 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
         />
         <Field
           label="Doğum ili"
-          placeholder="Doğum ilini daxil edin"
+          placeholder="Məsələn: 1965"
           keyboardType="number-pad"
           value={birthYear}
           onChangeText={setBirthYear}
@@ -149,6 +180,15 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
           value={note}
           onChangeText={setNote}
         />
+
+        <View className="mt-2 mb-8">
+          <Button
+            label="Yadda saxla"
+            size="lg"
+            loading={saving}
+            onPress={onSave}
+          />
+        </View>
       </KeyboardScrollView>
     </SafeAreaView>
   );

@@ -21,8 +21,9 @@ export type RootStackParamList = {
   ResetPasswordOtp: { email: string };
   ResetPasswordNew: { email: string; otpCode: string };
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
+  PatientDashboard: undefined;
   RecordList: { kind: RecordKind };
-  RecordForm: { kind: RecordKind };
+  RecordForm: { kind: RecordKind; id?: string };
   RecordDetail: { kind: RecordKind; id: string };
   Calendar: undefined;
   AppointmentForm: { date?: string } | undefined;

@@ -62,6 +62,13 @@ export interface RecordInput<C extends string> {
   date: string;
 }
 
+export interface RecordUpdateInput<C extends string> {
+  title: string;
+  description: string | null;
+  kind: C;
+  date?: string;
+}
+
 export const complaintsApi = {
   list: (patientId: string, type?: string, search?: string) =>
     http.get<Complaint[]>('complaints', { patientId, type, search }),
@@ -69,6 +76,12 @@ export const complaintsApi = {
   create: (dto: RecordInput<ComplaintType>) =>
     http.post<Complaint>('complaints', {
       patientId: dto.patientId,
+      title: dto.title,
+      description: dto.description,
+      type: dto.kind,
+    }),
+  update: (id: string, dto: RecordUpdateInput<ComplaintType>) =>
+    http.put<Complaint>(`complaints/${id}`, {
       title: dto.title,
       description: dto.description,
       type: dto.kind,
@@ -94,6 +107,13 @@ export const diagnosesApi = {
       category: dto.kind,
       date: dto.date,
     }),
+  update: (id: string, dto: RecordUpdateInput<DiagnosisCategory>) =>
+    http.put<Diagnosis>(`diagnoses/${id}`, {
+      title: dto.title,
+      description: dto.description,
+      category: dto.kind,
+      date: dto.date,
+    }),
   remove: (id: string) => http.delete(`diagnoses/${id}`),
   upload: (id: string, file: LocalFile) =>
     http.upload<FileItem>(`diagnoses/${id}/documents`, file),
@@ -108,6 +128,13 @@ export const treatmentsApi = {
   create: (dto: RecordInput<TreatmentCategory>) =>
     http.post<Treatment>('treatments', {
       patientId: dto.patientId,
+      title: dto.title,
+      description: dto.description,
+      category: dto.kind,
+      date: dto.date,
+    }),
+  update: (id: string, dto: RecordUpdateInput<TreatmentCategory>) =>
+    http.put<Treatment>(`treatments/${id}`, {
       title: dto.title,
       description: dto.description,
       category: dto.kind,

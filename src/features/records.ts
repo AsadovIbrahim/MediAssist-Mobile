@@ -1,5 +1,6 @@
 import {
   FileText,
+  FlaskConical,
   Image as ImageIcon,
   Mic,
   NotebookPen,
@@ -21,7 +22,7 @@ import { isAudioFile, isImageFile } from '../utils/media';
  * Complaints, diagnoses and treatments share the same UI (list → form → detail).
  * This module describes the differences between them in one place.
  */
-export type RecordKind = 'complaint' | 'diagnosis' | 'treatment';
+export type RecordKind = 'complaint' | 'examination' | 'diagnosis' | 'treatment';
 
 /** Normalized record used by the shared screens. */
 export interface RecordItem {
@@ -40,6 +41,7 @@ interface RecordApi {
   list: (patientId: string, filter?: string, search?: string) => Promise<RecordItem[]>;
   get: (id: string) => Promise<RecordItem>;
   create: (dto: RecordInput<string>) => Promise<RecordItem>;
+  update: (id: string, dto: RecordInput<string>) => Promise<RecordItem>;
   remove: (id: string) => Promise<unknown>;
   upload: (id: string, file: LocalFile) => Promise<FileItem>;
   removeFile: (id: string, fileId: string) => Promise<unknown>;
@@ -49,6 +51,7 @@ export interface RecordConfig {
   title: string;
   singular: string;
   newTitle: string;
+  editTitle: string;
   searchPlaceholder: string;
   descriptionLabel: string;
   descriptionPlaceholder: string;
@@ -80,6 +83,17 @@ const fromDoc = (d: Diagnosis | Treatment): RecordItem => ({
   files: d.documents ?? [],
 });
 
+const fromExamination = (d: Diagnosis): RecordItem => ({
+  id: d.id,
+  title: d.title,
+  description: d.description
+    ? d.description.replace(/^\[Müayinə\]\n?/, '').trim() || null
+    : null,
+  kind: d.category,
+  date: d.date || d.createdAt,
+  files: d.documents ?? [],
+});
+
 const ALL = 'All';
 
 export const RECORDS: Record<RecordKind, RecordConfig> = {
@@ -87,6 +101,7 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
     title: 'Şikayətlər',
     singular: 'Şikayət',
     newTitle: 'Yeni şikayət',
+    editTitle: 'Şikayəti redaktə et',
     searchPlaceholder: 'Şikayət axtar...',
     descriptionLabel: 'Şikayətin təsviri',
     descriptionPlaceholder: 'Şikayəti ətraflı təsvir edin...',
@@ -111,19 +126,87 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
       get: async id => fromComplaint(await complaintsApi.get(id)),
       create: async dto =>
         fromComplaint(await complaintsApi.create(dto as RecordInput<Complaint['type']>)),
+      update: async (id, dto) =>
+        fromComplaint(
+          await complaintsApi.update(id, {
+            title: dto.title,
+            description: dto.description,
+            kind: dto.kind as Complaint['type'],
+          }),
+        ),
       remove: complaintsApi.remove,
       upload: complaintsApi.upload,
       removeFile: complaintsApi.removeFile,
+    },
+  },
+  examination: {
+    title: 'Müayinələr',
+    singular: 'Müayinə',
+    newTitle: 'Yeni müayinə',
+    editTitle: 'Müayinəni redaktə et',
+    searchPlaceholder: 'Müayinə və ya analiz axtar...',
+    descriptionLabel: 'Müayinə təsviri / Nəticə',
+    descriptionPlaceholder: 'Müayinə nəticələri, laboratoriya göstəriciləri...',
+    titlePlaceholder: 'Məs: Qan analizi / USM / Rentgen',
+    filters: [
+      { value: ALL, label: 'Hamısı' },
+      { value: 'Document', label: 'Sənədlər' },
+      { value: 'Image', label: 'Şəkillər' },
+      { value: 'Note', label: 'Qeydlər' },
+    ],
+    kinds: [
+      { value: 'Document', label: 'Sənəd' },
+      { value: 'Image', label: 'Şəkil' },
+      { value: 'Note', label: 'Qeyd' },
+    ],
+    defaultKind: 'Document',
+    hasDate: true,
+    sources: ['gallery', 'camera', 'document'],
+    emptyText: 'Hələ müayinə və ya analiz sənədi əlavə edilməyib.',
+    api: {
+      list: async (p, _f, s) => {
+        const all = await diagnosesApi.list(p, undefined, s);
+        return all
+          .filter(d => d.description?.startsWith('[Müayinə]'))
+          .map(fromExamination);
+      },
+      get: async id => fromExamination(await diagnosesApi.get(id)),
+      create: async dto => {
+        const desc = dto.description ? `[Müayinə]\n${dto.description}` : '[Müayinə]';
+        const created = await diagnosesApi.create({
+          patientId: dto.patientId,
+          title: dto.title,
+          description: desc,
+          kind: (dto.kind as Diagnosis['category']) || 'Document',
+          date: dto.date,
+        });
+        return fromExamination(created);
+      },
+      update: async (id, dto) => {
+        const desc = dto.description ? `[Müayinə]\n${dto.description}` : '[Müayinə]';
+        return fromExamination(
+          await diagnosesApi.update(id, {
+            title: dto.title,
+            description: desc,
+            kind: (dto.kind as Diagnosis['category']) || 'Document',
+            date: dto.date,
+          }),
+        );
+      },
+      remove: diagnosesApi.remove,
+      upload: diagnosesApi.upload,
+      removeFile: diagnosesApi.removeFile,
     },
   },
   diagnosis: {
     title: 'Diaqnoz',
     singular: 'Diaqnoz',
     newTitle: 'Yeni diaqnoz',
+    editTitle: 'Diaqnozu redaktə et',
     searchPlaceholder: 'Diaqnoz axtar...',
     descriptionLabel: 'Təsvir',
     descriptionPlaceholder: 'Diaqnoz haqqında qeydlər...',
-    titlePlaceholder: 'Məs: Qan analizi nəticəsi',
+    titlePlaceholder: 'Məs: Hipertoniya / Qastrit',
     filters: [
       { value: ALL, label: 'Hamısı' },
       { value: 'Document', label: 'Sənədlər' },
@@ -140,10 +223,24 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
     sources: ['gallery', 'camera', 'document'],
     emptyText: 'Hələ diaqnoz sənədi əlavə edilməyib.',
     api: {
-      list: async (p, f, s) => (await diagnosesApi.list(p, f, s)).map(fromDoc),
+      list: async (p, f, s) => {
+        const all = await diagnosesApi.list(p, f, s);
+        return all
+          .filter(d => !d.description?.startsWith('[Müayinə]'))
+          .map(fromDoc);
+      },
       get: async id => fromDoc(await diagnosesApi.get(id)),
       create: async dto =>
         fromDoc(await diagnosesApi.create(dto as RecordInput<Diagnosis['category']>)),
+      update: async (id, dto) =>
+        fromDoc(
+          await diagnosesApi.update(id, {
+            title: dto.title,
+            description: dto.description,
+            kind: (dto.kind as Diagnosis['category']) || 'Document',
+            date: dto.date,
+          }),
+        ),
       remove: diagnosesApi.remove,
       upload: diagnosesApi.upload,
       removeFile: diagnosesApi.removeFile,
@@ -153,6 +250,7 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
     title: 'Müalicə',
     singular: 'Müalicə',
     newTitle: 'Yeni müalicə',
+    editTitle: 'Müalicəni redaktə et',
     searchPlaceholder: 'Müalicə axtar...',
     descriptionLabel: 'Təsvir',
     descriptionPlaceholder: 'Dərmanlar, dozalar, tövsiyələr...',
@@ -177,6 +275,15 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
       get: async id => fromDoc(await treatmentsApi.get(id)),
       create: async dto =>
         fromDoc(await treatmentsApi.create(dto as RecordInput<Treatment['category']>)),
+      update: async (id, dto) =>
+        fromDoc(
+          await treatmentsApi.update(id, {
+            title: dto.title,
+            description: dto.description,
+            kind: (dto.kind as Treatment['category']) || 'Prescription',
+            date: dto.date,
+          }),
+        ),
       remove: treatmentsApi.remove,
       upload: treatmentsApi.upload,
       removeFile: treatmentsApi.removeFile,
@@ -206,6 +313,13 @@ export function recordVisual(kind: RecordKind, item: RecordItem): { icon: Lucide
       return { icon: ImageIcon, tint: 'purple' };
     }
     return { icon: FileText, tint: 'red' };
+  }
+
+  if (kind === 'examination') {
+    if (item.kind === 'Image' || onlyImages) {
+      return { icon: ImageIcon, tint: 'purple' };
+    }
+    return { icon: FlaskConical, tint: 'purple' };
   }
 
   if (kind === 'treatment' && item.kind === 'Prescription') {

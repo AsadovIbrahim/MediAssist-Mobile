@@ -19,6 +19,7 @@ import {
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { DocumentsScreen } from '../screens/DocumentsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { PatientDashboardScreen } from '../screens/PatientDashboardScreen';
 import { PatientFormScreen } from '../screens/PatientFormScreen';
 import { PatientsScreen } from '../screens/PatientsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -41,20 +42,20 @@ function MainTabs() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textLight,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 56 + bottomPadding,
+          height: 64 + bottomPadding,
           paddingTop: 8,
           paddingBottom: bottomPadding,
           paddingHorizontal: 8,
         },
         tabBarLabelStyle: {
           fontFamily: 'RedditSans',
-          fontSize: 11,
-          fontWeight: '600',
+          fontSize: 13,
+          fontWeight: '700',
           marginTop: 2,
         },
       }}>
@@ -63,7 +64,7 @@ function MainTabs() {
         component={HomeScreen}
         options={{
           title: 'Ana səhifə',
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Home size={25} color={color} strokeWidth={2.2} />,
         }}
       />
       <Tab.Screen
@@ -71,7 +72,7 @@ function MainTabs() {
         component={DocumentsScreen}
         options={{
           title: 'Sənədlər',
-          tabBarIcon: ({ color, size }) => <FileText size={size} color={color} />,
+          tabBarIcon: ({ color }) => <FileText size={25} color={color} strokeWidth={2.2} />,
         }}
       />
       <Tab.Screen
@@ -79,7 +80,7 @@ function MainTabs() {
         component={SearchScreen}
         options={{
           title: 'Axtarış',
-          tabBarIcon: ({ color, size }) => <Search size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Search size={25} color={color} strokeWidth={2.2} />,
         }}
       />
       <Tab.Screen
@@ -87,7 +88,7 @@ function MainTabs() {
         component={ProfileScreen}
         options={{
           title: 'Profil',
-          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+          tabBarIcon: ({ color }) => <User size={25} color={color} strokeWidth={2.2} />,
         }}
       />
     </Tab.Navigator>
@@ -117,6 +118,7 @@ export function RootNavigator() {
         ) : (
           <>
             <Stack.Screen name="Tabs" component={MainTabs} />
+            <Stack.Screen name="PatientDashboard" component={PatientDashboardScreen} />
             <Stack.Screen name="RecordList" component={RecordListScreen} />
             <Stack.Screen name="RecordForm" component={RecordFormScreen} />
             <Stack.Screen name="RecordDetail" component={RecordDetailScreen} />

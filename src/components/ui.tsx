@@ -171,16 +171,16 @@ interface HeaderProps {
 export function ScreenHeader({ title, right, back = true }: HeaderProps) {
   const navigation = useNavigation();
   return (
-    <View className="flex-row items-center px-4 pt-2 pb-3">
+    <View className="flex-row items-center px-4 pt-3 pb-3">
       {back && (
         <Pressable
           onPress={() => navigation.goBack()}
-          hitSlop={12}
-          className="mr-3 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface active:bg-field">
-          <ChevronLeft size={22} color={colors.text} />
+          hitSlop={14}
+          className="mr-3 h-11 w-11 items-center justify-center rounded-2xl border border-line bg-surface active:bg-field shadow-sm">
+          <ChevronLeft size={24} color={colors.text} />
         </Pressable>
       )}
-      <Text className="flex-1 text-lg font-bold text-ink" numberOfLines={1}>
+      <Text className="flex-1 text-[21px] font-bold text-ink" numberOfLines={1}>
         {title}
       </Text>
       {right}
@@ -219,22 +219,28 @@ export function Button({
     danger: { bg: colors.dangerSoft, fg: colors.danger },
     ghost: { bg: 'transparent', fg: colors.primary },
   }[variant];
-  const pad = { sm: 'px-3.5 py-2', md: 'px-4 py-2.5', lg: 'px-5 py-3.5' }[size];
-  const text = { sm: 'text-sm', md: 'text-sm', lg: 'text-base' }[size];
+  const pad = { sm: 'px-4 py-2.5', md: 'px-5 py-3.5', lg: 'px-6 py-4' }[size];
+  const text = { sm: 'text-[15px]', md: 'text-[16px]', lg: 'text-[18px]' }[size];
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={{ backgroundColor: palette.bg, opacity: disabled ? 0.5 : 1 }}
-      className={`flex-row items-center justify-center rounded-xl active:opacity-80 ${pad} ${className}`}>
+      className={`flex-row items-center justify-center rounded-2xl active:opacity-80 ${pad} ${className}`}>
       {loading ? (
         <ActivityIndicator size="small" color={palette.fg} />
       ) : (
         <>
-          {Icon && <Icon size={size === 'lg' ? 20 : 16} color={palette.fg} strokeWidth={2.4} />}
+          {Icon && (
+            <Icon
+              size={size === 'lg' ? 22 : size === 'md' ? 20 : 18}
+              color={palette.fg}
+              strokeWidth={2.4}
+            />
+          )}
           <Text
             style={{ color: palette.fg }}
-            className={`font-semibold ${text} ${Icon ? 'ml-1.5' : ''}`}>
+            className={`font-bold ${text} ${Icon ? 'ml-2' : ''}`}>
             {label}
           </Text>
         </>
@@ -253,12 +259,12 @@ export function AddButton({ onPress, label = 'Əlavə et' }: { onPress: () => vo
 
 export function SearchBar(props: TextInputProps) {
   return (
-    <View className="mx-4 mb-3 flex-row items-center rounded-xl bg-field px-3">
-      <Search size={18} color={colors.textLight} />
+    <View className="mx-4 mb-3 flex-row items-center rounded-2xl border border-line bg-field px-3.5 py-1">
+      <Search size={22} color={colors.textMuted} />
       <TextInput
         placeholderTextColor={colors.textLight}
         returnKeyType="search"
-        className="ml-2 flex-1 py-3 text-[15px] text-ink"
+        className="ml-2.5 flex-1 py-3 text-[16px] font-medium text-ink"
         {...props}
       />
     </View>
@@ -286,11 +292,11 @@ export function Field({
   const [passwordVisible, setPasswordVisible] = useState(false);
 
   return (
-    <View ref={wrapRef} collapsable={false} className="mb-4">
-      {label && <Text className="mb-2 text-[15px] font-semibold text-ink">{label}</Text>}
+    <View ref={wrapRef} collapsable={false} className="mb-5">
+      {label && <Text className="mb-2 text-[16px] font-bold text-ink">{label}</Text>}
       {secureTextEntry ? (
         <View
-          className={`flex-row items-center rounded-xl border bg-surface px-3.5 ${
+          className={`flex-row items-center rounded-2xl border bg-surface px-4 ${
             error ? 'border-danger' : 'border-line'
           }`}>
           <TextInput
@@ -299,7 +305,7 @@ export function Field({
             placeholderTextColor={colors.textLight}
             autoCapitalize="none"
             autoCorrect={false}
-            className="flex-1 py-3 text-[15px] text-ink"
+            className="flex-1 py-3.5 text-[16px] text-ink"
             maxLength={counter}
             onFocus={e => {
               ensureVisible?.(wrapRef.current);
@@ -309,12 +315,12 @@ export function Field({
           />
           <Pressable
             onPress={() => setPasswordVisible(prev => !prev)}
-            hitSlop={10}
+            hitSlop={12}
             className="ml-2 py-1 pl-1">
             {passwordVisible ? (
-              <Eye size={20} color={colors.textMuted} />
+              <Eye size={22} color={colors.textMuted} />
             ) : (
-              <EyeOff size={20} color={colors.textMuted} />
+              <EyeOff size={22} color={colors.textMuted} />
             )}
           </Pressable>
         </View>
@@ -324,8 +330,8 @@ export function Field({
           multiline={multiline}
           placeholderTextColor={colors.textLight}
           textAlignVertical={multiline ? 'top' : 'center'}
-          style={multiline ? { minHeight: 120 } : undefined}
-          className={`rounded-xl border bg-surface px-3.5 py-3 text-[15px] text-ink ${
+          style={multiline ? { minHeight: 130 } : undefined}
+          className={`rounded-2xl border bg-surface px-4 py-3.5 text-[16px] text-ink leading-6 ${
             error ? 'border-danger' : 'border-line'
           }`}
           maxLength={counter}
@@ -337,11 +343,11 @@ export function Field({
         />
       )}
       {counter !== undefined && (
-        <Text className="mt-1 self-end text-xs text-ink-light">
+        <Text className="mt-1 self-end text-xs font-semibold text-ink-muted">
           {value?.length ?? 0}/{counter}
         </Text>
       )}
-      {error && <Text className="mt-1 text-xs text-danger">{error}</Text>}
+      {error && <Text className="mt-1.5 text-sm font-semibold text-danger">{error}</Text>}
     </View>
   );
 }
@@ -369,16 +375,17 @@ export function FilterChips<T extends string>({
       horizontal
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
-      className="mb-2 grow-0"
-      contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+      className="mb-3 grow-0"
+      contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
       {options.map(o => {
         const active = o.value === value;
         return (
           <Pressable
             key={o.value}
             onPress={() => onChange(o.value)}
-            className={`rounded-xl px-4 py-2 ${active ? 'bg-primary' : 'bg-field'}`}>
-            <Text className={`text-sm font-medium ${active ? 'text-white' : 'text-ink-muted'}`}>
+            hitSlop={6}
+            className={`rounded-2xl px-5 py-2.5 ${active ? 'bg-primary' : 'bg-field border border-line'}`}>
+            <Text className={`text-[15px] ${active ? 'font-bold text-white' : 'font-semibold text-ink'}`}>
               {o.label}
             </Text>
           </Pressable>
@@ -398,18 +405,19 @@ export function Segmented<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <View className="mb-5 flex-row gap-2">
+    <View className="mb-5 flex-row gap-2.5">
       {options.map(o => {
         const active = o.value === value;
         return (
           <Pressable
             key={o.value}
             onPress={() => onChange(o.value)}
-            className={`flex-1 items-center rounded-xl py-2.5 ${
-              active ? 'bg-primary-soft' : 'bg-field'
+            hitSlop={6}
+            className={`flex-1 items-center rounded-2xl py-3 border ${
+              active ? 'bg-primary-soft border-primary' : 'bg-field border-line'
             }`}>
             <Text
-              className={`text-sm ${active ? 'font-semibold text-primary' : 'text-ink-muted'}`}>
+              className={`text-[15px] ${active ? 'font-bold text-primary' : 'font-semibold text-ink-muted'}`}>
               {o.label}
             </Text>
           </Pressable>
@@ -499,23 +507,23 @@ export function EmptyState({
 }) {
   return (
     <View className="items-center px-8 py-16">
-      <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-field">
-        <Icon size={30} color={colors.textLight} />
+      <View className="mb-4 h-20 w-20 items-center justify-center rounded-3xl bg-field">
+        <Icon size={36} color={colors.textMuted} />
       </View>
-      <Text className="text-center text-base font-semibold text-ink">{title}</Text>
-      {text && <Text className="mt-1 text-center text-sm text-ink-muted">{text}</Text>}
-      {action && <View className="mt-5">{action}</View>}
+      <Text className="text-center text-lg font-bold text-ink">{title}</Text>
+      {text && <Text className="mt-2 text-center text-[15px] font-medium leading-6 text-ink-muted">{text}</Text>}
+      {action && <View className="mt-6">{action}</View>}
     </View>
   );
 }
 
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <View className="mx-4 mb-3 rounded-xl bg-danger-soft p-3">
-      <Text className="text-sm text-danger">{message}</Text>
+    <View className="mx-4 mb-3 rounded-2xl bg-danger-soft p-4">
+      <Text className="text-[15px] font-semibold text-danger">{message}</Text>
       {onRetry && (
-        <Pressable onPress={onRetry} className="mt-2 self-start">
-          <Text className="text-sm font-semibold text-danger">Yenidən cəhd et</Text>
+        <Pressable onPress={onRetry} className="mt-2.5 self-start">
+          <Text className="text-[15px] font-bold text-danger">Yenidən cəhd et</Text>
         </Pressable>
       )}
     </View>
@@ -525,8 +533,8 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
 export function CountBadge({ count, tint }: { count: number; tint: TintName }) {
   const t = tints[tint];
   return (
-    <View style={{ backgroundColor: t.tile }} className="min-w-[26px] items-center rounded-lg px-2 py-0.5">
-      <Text style={{ color: t.fg }} className="text-xs font-bold">
+    <View style={{ backgroundColor: t.tile }} className="min-w-[28px] items-center rounded-xl px-2.5 py-1">
+      <Text style={{ color: t.fg }} className="text-[13px] font-bold">
         {count}
       </Text>
     </View>

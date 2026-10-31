@@ -43,21 +43,27 @@ export function MonthCalendar({ month, selected, onSelect, onMonthChange, marker
 
   return (
     <View className="px-3">
-      <View className="mb-3 flex-row items-center justify-between px-1">
-        <Pressable onPress={() => shift(-1)} hitSlop={12} className="p-1">
-          <ChevronLeft size={20} color={colors.text} />
+      <View className="mb-4 flex-row items-center justify-between px-1">
+        <Pressable
+          onPress={() => shift(-1)}
+          hitSlop={14}
+          className="h-10 w-10 items-center justify-center rounded-xl bg-field active:bg-line">
+          <ChevronLeft size={22} color={colors.text} />
         </Pressable>
-        <Text className="text-base font-semibold text-ink">
+        <Text className="text-[18px] font-bold text-ink">
           {MONTHS[month.getMonth()]} {month.getFullYear()}
         </Text>
-        <Pressable onPress={() => shift(1)} hitSlop={12} className="p-1">
-          <ChevronRight size={20} color={colors.text} />
+        <Pressable
+          onPress={() => shift(1)}
+          hitSlop={14}
+          className="h-10 w-10 items-center justify-center rounded-xl bg-field active:bg-line">
+          <ChevronRight size={22} color={colors.text} />
         </Pressable>
       </View>
 
-      <View className="mb-1 flex-row">
+      <View className="mb-2 flex-row">
         {WEEKDAYS.map(w => (
-          <Text key={w} className="flex-1 text-center text-xs font-medium text-ink-muted">
+          <Text key={w} className="flex-1 text-center text-[13px] font-bold text-ink-muted">
             {w}
           </Text>
         ))}
@@ -74,20 +80,20 @@ export function MonthCalendar({ month, selected, onSelect, onMonthChange, marker
               <Pressable
                 key={d.toISOString()}
                 onPress={() => onSelect(d)}
-                className="h-11 flex-1 items-center justify-center">
+                className="h-12 flex-1 items-center justify-center">
                 <View
-                  className={`h-8 w-8 items-center justify-center rounded-full ${
+                  className={`h-9 w-9 items-center justify-center rounded-full ${
                     isSelected ? 'bg-primary' : ''
                   }`}>
                   <Text
-                    className={`text-sm ${
+                    className={`text-[16px] ${
                       isSelected
-                        ? 'font-semibold text-white'
+                        ? 'font-bold text-white'
                         : !inMonth
-                          ? 'text-ink-light/60'
+                          ? 'text-ink-light/50 font-normal'
                           : isToday
                             ? 'font-bold text-primary'
-                            : 'text-ink'
+                            : 'font-semibold text-ink'
                     }`}>
                     {d.getDate()}
                   </Text>
@@ -96,7 +102,7 @@ export function MonthCalendar({ month, selected, onSelect, onMonthChange, marker
                   style={{
                     backgroundColor: marker && !isSelected ? marker : 'transparent',
                   }}
-                  className="mt-0.5 h-1 w-1 rounded-full"
+                  className="mt-0.5 h-1.5 w-1.5 rounded-full"
                 />
               </Pressable>
             );
