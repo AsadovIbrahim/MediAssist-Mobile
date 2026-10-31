@@ -82,7 +82,7 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
 
       await refresh();
       await select(saved.id);
-      navigation.goBack();
+      navigation.navigate('Tabs', { screen: 'Home' });
     } catch (e) {
       Alert.alert('Xəta', (e as Error).message);
     } finally {

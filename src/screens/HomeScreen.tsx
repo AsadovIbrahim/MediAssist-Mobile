@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +13,7 @@ import {
   Bell,
   Brain,
   Calendar,
+  Check,
   ChevronDown,
   ChevronRight,
   Pill,
@@ -22,6 +24,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react-native';
+import { fileUrl } from '../api/client';
 import { patientsApi } from '../api/services';
 import { Button, CountBadge, EmptyState, ErrorBanner, IconTile } from '../components/ui';
 import { firstNameOf, useAuth } from '../context/AuthContext';
@@ -43,7 +46,13 @@ interface HomeRow {
 export function HomeScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { patient, patients, loading: loadingPatients, refresh: refreshPatients } = usePatient();
+  const {
+    patient,
+    patients,
+    loading: loadingPatients,
+    refresh: refreshPatients,
+    select,
+  } = usePatient();
 
   const {
     data: dashboard,
@@ -129,22 +138,16 @@ export function HomeScreen() {
         contentContainerStyle={{ paddingBottom: 28 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {/* Top Greeting Header */}
-        <View className="flex-row items-center justify-between px-5 pt-3 pb-3">
+        <View className="flex-row items-center justify-between px-5 pt-3 pb-2">
           <View className="flex-1 pr-3">
             <Text className="text-[26px] font-bold text-ink" numberOfLines={1}>
               Salam, {greetingName}!
             </Text>
-            {patients.length > 0 && (
-              <Pressable
-                onPress={() => navigation.navigate('Patients')}
-                hitSlop={8}
-                className="mt-1 flex-row items-center self-start rounded-full bg-field px-2.5 py-1">
-                <Text className="text-xs font-medium text-ink-muted" numberOfLines={1}>
-                  Pasiyent: {patientFullName(patient)}
-                </Text>
-                <ChevronDown size={13} color={colors.textMuted} style={{ marginLeft: 3 }} />
-              </Pressable>
-            )}
+            <Text className="mt-0.5 text-xs text-ink-muted">
+              {patient
+                ? `Aktiv pasiyent: ${patientFullName(patient)}`
+                : 'Pasiyent seçilməyib'}
+            </Text>
           </View>
           <Pressable
             onPress={() => navigation.navigate('Calendar')}
@@ -153,6 +156,96 @@ export function HomeScreen() {
             <Bell size={22} color={colors.text} />
           </Pressable>
         </View>
+
+        {/* Pasiyentlər Siyahısı (Home ekranında rahat seçim) */}
+        {patients.length > 0 && (
+          <View className="mb-4 mt-2">
+            <View className="mb-2.5 flex-row items-center justify-between px-5">
+              <View className="flex-row items-center">
+                <Text className="text-[16px] font-bold text-ink">Pasiyentlər</Text>
+                <View className="ml-2 rounded-full bg-primary-soft px-2 py-0.5">
+                  <Text className="text-xs font-bold text-primary">{patients.length}</Text>
+                </View>
+              </View>
+              <View className="flex-row items-center gap-1.5">
+                <Pressable
+                  onPress={() => navigation.navigate('PatientForm')}
+                  hitSlop={6}
+                  className="flex-row items-center rounded-lg bg-primary-soft px-2.5 py-1 active:opacity-75">
+                  <Plus size={14} color={colors.primary} />
+                  <Text className="ml-1 text-xs font-semibold text-primary">Yeni</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => navigation.navigate('Patients')}
+                  hitSlop={6}
+                  className="flex-row items-center py-1 pl-1 active:opacity-75">
+                  <Text className="text-xs font-semibold text-ink-muted">Hamısı</Text>
+                  <ChevronRight size={14} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
+              {patients.map(p => {
+                const active = patient?.id === p.id;
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => select(p.id)}
+                    style={{
+                      borderColor: active ? colors.primary : colors.border,
+                      backgroundColor: active ? '#F0F7FF' : colors.surface,
+                    }}
+                    className={`flex-row items-center rounded-2xl border px-3.5 py-2.5 active:opacity-80 ${
+                      active ? 'border-[1.8px] shadow-sm' : ''
+                    }`}>
+                    {p.photoUrl ? (
+                      <Image
+                        source={{ uri: fileUrl(p.photoUrl) }}
+                        style={{ width: 38, height: 38, borderRadius: 19 }}
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          backgroundColor: active ? colors.primary : tints.blue.tile,
+                        }}
+                        className="h-[38px] w-[38px] items-center justify-center rounded-full">
+                        <Text
+                          style={{ color: active ? '#FFFFFF' : tints.blue.fg }}
+                          className="text-sm font-bold">
+                          {p.firstName.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View className="ml-2.5 mr-1">
+                      <View className="flex-row items-center">
+                        <Text
+                          className={`text-[14px] font-bold ${
+                            active ? 'text-primary' : 'text-ink'
+                          }`}
+                          numberOfLines={1}>
+                          {patientFullName(p)}
+                        </Text>
+                        {active && (
+                          <View className="ml-1.5 h-4 w-4 items-center justify-center rounded-full bg-primary">
+                            <Check size={10} color="#FFFFFF" strokeWidth={3} />
+                          </View>
+                        )}
+                      </View>
+                      <Text className="mt-0.5 text-xs text-ink-muted" numberOfLines={1}>
+                        {p.phone || (p.age ? `${p.age} yaş` : 'Pasiyent')}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Search bar ("Sənəd axtar...") */}
         <Pressable

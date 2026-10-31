@@ -88,7 +88,7 @@ export function PatientsScreen({ navigation }: RootScreenProps<'Patients'>) {
             <Card
               onPress={async () => {
                 await select(item.id);
-                navigation.goBack();
+                navigation.navigate('Tabs', { screen: 'Home' });
               }}
               className="mx-4 mb-3 flex-row items-center p-3.5">
               {item.photoUrl ? (
