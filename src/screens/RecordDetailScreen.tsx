@@ -13,17 +13,20 @@ import { fileUrl } from '../api/client';
 import type { FileItem } from '../api/types';
 import { ImageViewer, openRemoteFile, VoicePlayer } from '../components/media';
 import { Button, Card, ErrorBanner, IconTile, Loading, ScreenHeader } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { usePatient } from '../context/PatientContext';
-import { RECORDS, recordVisual, splitFiles } from '../features/records';
+import { useTheme } from '../context/ThemeContext';
+import { getRecordConfig, localizeRecordTitle, RECORDS, recordVisual, splitFiles } from '../features/records';
 import type { RootScreenProps } from '../navigation/types';
-import { colors, tints } from '../theme';
 import { formatDate, formatSize } from '../utils/format';
 import { useFocusData } from '../utils/hooks';
 import { docLabel, pickDocuments, pickImages } from '../utils/media';
 
 export function RecordDetailScreen({ navigation, route }: RootScreenProps<'RecordDetail'>) {
   const { kind, id } = route.params;
-  const cfg = RECORDS[kind];
+  const { language, t } = useLanguage();
+  const { colors, tints } = useTheme();
+  const cfg = getRecordConfig(kind, t);
   const { refresh: refreshPatients } = usePatient();
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -36,10 +39,10 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
   } = useFocusData(() => cfg.api.get(id), [kind, id]);
 
   const confirmDelete = () => {
-    Alert.alert('Silinsin?', `"${item?.title}" qeydini silmək istədiyinizə əminsiniz?`, [
-      { text: 'Ləğv et', style: 'cancel' },
+    Alert.alert(t('record.deleteConfirmTitle'), localizeRecordTitle(item?.title || '', kind, t), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sil',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -47,7 +50,7 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
             await refreshPatients();
             navigation.goBack();
           } catch (e) {
-            Alert.alert('Xəta', (e as Error).message);
+            Alert.alert(t('common.error'), (e as Error).message);
           }
         },
       },
@@ -55,17 +58,17 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
   };
 
   const confirmDeleteFile = (file: FileItem) => {
-    Alert.alert('Fayl silinsin?', file.fileName, [
-      { text: 'Ləğv et', style: 'cancel' },
+    Alert.alert(t('record.deleteFileTitle'), file.fileName, [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sil',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
             await cfg.api.removeFile(id, file.id);
             await reload();
           } catch (e) {
-            Alert.alert('Xəta', (e as Error).message);
+            Alert.alert(t('common.error'), (e as Error).message);
           }
         },
       },
@@ -92,7 +95,7 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-canvas">
+      <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
         <ScreenHeader title={cfg.singular} />
         <Loading />
       </SafeAreaView>
@@ -101,7 +104,7 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
 
   if (!item) {
     return (
-      <SafeAreaView className="flex-1 bg-canvas">
+      <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
         <ScreenHeader title={cfg.singular} />
         {error && <ErrorBanner message={error} onRetry={reload} />}
       </SafeAreaView>
@@ -113,7 +116,7 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
   const kindLabel = cfg.kinds.find(k => k.value === item.kind)?.label ?? item.kind;
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
+    <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScreenHeader
         title={cfg.singular}
         right={
@@ -121,13 +124,15 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
             <Pressable
               onPress={() => navigation.navigate('RecordForm', { kind, id: item.id })}
               hitSlop={12}
-              className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft active:opacity-70">
+              style={{ backgroundColor: colors.primarySoft }}
+              className="h-11 w-11 items-center justify-center rounded-2xl active:opacity-70">
               <Pencil size={20} color={colors.primary} />
             </Pressable>
             <Pressable
               onPress={confirmDelete}
               hitSlop={12}
-              className="h-11 w-11 items-center justify-center rounded-2xl bg-danger-soft active:opacity-70">
+              style={{ backgroundColor: colors.dangerSoft }}
+              className="h-11 w-11 items-center justify-center rounded-2xl active:opacity-70">
               <Trash2 size={20} color={colors.danger} />
             </Pressable>
           </View>
@@ -139,22 +144,22 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
           <View className="flex-row items-center">
             <IconTile icon={icon} tint={tint} size={54} iconSize={26} variant="soft" />
             <View className="ml-3.5 flex-1">
-              <Text className="text-[20px] font-bold text-ink">{item.title}</Text>
-              <Text className="mt-1 text-[14px] font-medium text-ink-muted">
-                {formatDate(item.date)} • {kindLabel}
+              <Text style={{ color: colors.text }} className="text-[20px] font-bold">{localizeRecordTitle(item.title, kind, t)}</Text>
+              <Text style={{ color: colors.textMuted }} className="mt-1 text-[14px] font-medium">
+                {formatDate(item.date, language)} • {kindLabel}
               </Text>
             </View>
           </View>
 
           {!!item.description && (
-            <Text className="mt-4 text-[16px] leading-7 text-ink">{item.description}</Text>
+            <Text style={{ color: colors.text }} className="mt-4 text-[16px] leading-7">{item.description}</Text>
           )}
         </Card>
 
         {images.length > 0 && (
           <View className="mt-5">
-            <Text className="mb-3 text-[17px] font-bold text-ink">
-              Şəkillər ({images.length})
+            <Text style={{ color: colors.text }} className="mb-3 text-[17px] font-bold">
+              {t('record.images')} ({images.length})
             </Text>
             <View className="flex-row flex-wrap gap-2.5">
               {images.map((img, i) => (
@@ -162,7 +167,8 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
                   key={img.id}
                   onPress={() => setViewerIndex(i)}
                   onLongPress={() => confirmDeleteFile(img)}
-                  className="overflow-hidden rounded-2xl border border-line bg-surface">
+                  style={{ borderColor: colors.border, backgroundColor: colors.surface }}
+                  className="overflow-hidden rounded-2xl border">
                   <Image
                     source={{ uri: fileUrl(img.filePath) }}
                     style={{ width: 104, height: 104 }}
@@ -175,13 +181,13 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
 
         {audios.length > 0 && (
           <View className="mt-5">
-            <Text className="mb-2.5 text-[15px] font-semibold text-ink">
-              Səs qeydləri ({audios.length})
+            <Text style={{ color: colors.text }} className="mb-2.5 text-[15px] font-semibold">
+              {t('record.voiceNotes')} ({audios.length})
             </Text>
             {audios.map(a => (
               <Card key={a.id} className="mb-2.5 p-3">
                 <View className="flex-row items-center justify-between">
-                  <Text className="flex-1 text-sm font-medium text-ink" numberOfLines={1}>
+                  <Text style={{ color: colors.text }} className="flex-1 text-sm font-medium" numberOfLines={1}>
                     {a.fileName}
                   </Text>
                   <Pressable onPress={() => confirmDeleteFile(a)} hitSlop={8}>
@@ -196,8 +202,8 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
 
         {docs.length > 0 && (
           <View className="mt-5">
-            <Text className="mb-2.5 text-[15px] font-semibold text-ink">
-              Sənədlər ({docs.length})
+            <Text style={{ color: colors.text }} className="mb-2.5 text-[15px] font-semibold">
+              {t('record.docs')} ({docs.length})
             </Text>
             {docs.map(d => {
               const badge = docLabel(d);
@@ -213,10 +219,10 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
                     <FileText size={22} color={isPdf ? tints.red.fg : tints.blue.fg} />
                   </View>
                   <View className="ml-3 flex-1">
-                    <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
+                    <Text style={{ color: colors.text }} className="text-sm font-semibold" numberOfLines={1}>
                       {d.fileName}
                     </Text>
-                    <Text className="mt-0.5 text-xs text-ink-muted">
+                    <Text style={{ color: colors.textMuted }} className="mt-0.5 text-xs">
                       {badge} • {formatSize(d.fileSize)}
                     </Text>
                   </View>
@@ -235,7 +241,7 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
 
         <View className="mt-6">
           <Button
-            label="Fayl əlavə et"
+            label={t('record.addFile')}
             icon={Plus}
             variant="soft"
             loading={uploading}

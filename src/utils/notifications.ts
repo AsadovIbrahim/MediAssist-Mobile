@@ -1,6 +1,18 @@
 import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Appointment } from '../api/types';
 import { formatTime, parseDate } from './format';
+
+export const NOTIFICATIONS_ENABLED_KEY = 'mediassist.settings.notifications';
+
+export async function isNotificationsEnabled(): Promise<boolean> {
+  try {
+    const val = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
+    return val === null ? true : val === 'true';
+  } catch {
+    return true;
+  }
+}
 
 const { LocalNotificationModule } = NativeModules;
 
@@ -44,6 +56,11 @@ export async function scheduleAppointmentNotification(appointment: {
   dateTime: string;
 }): Promise<void> {
   if (!LocalNotificationModule?.scheduleNotification) {
+    return;
+  }
+
+  // Respect user preference in Profile settings
+  if (!(await isNotificationsEnabled())) {
     return;
   }
 
@@ -94,6 +111,11 @@ export async function cancelAppointmentNotification(appointmentId: string): Prom
 /** Sync all upcoming appointments into Android alarms. */
 export async function syncUpcomingAppointments(appointments: Appointment[]): Promise<void> {
   if (!LocalNotificationModule?.scheduleNotification || !appointments.length) {
+    return;
+  }
+
+  // Respect user preference in Profile settings
+  if (!(await isNotificationsEnabled())) {
     return;
   }
 

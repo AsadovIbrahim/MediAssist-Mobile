@@ -9,9 +9,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Brain, FileText, Pill, Send, Sparkles, Stethoscope } from 'lucide-react-native';
 import { Card, IconTile, KeyboardLiftView, Loading, ScreenHeader } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { patientFullName, usePatient } from '../context/PatientContext';
+import { useTheme } from '../context/ThemeContext';
 import { RECORDS, type RecordItem } from '../features/records';
-import { colors } from '../theme';
 import { formatDate } from '../utils/format';
 import { useFocusData } from '../utils/hooks';
 
@@ -22,7 +23,9 @@ interface ChatMessage {
 }
 
 export function AiScreen() {
+  const { language, t } = useLanguage();
   const { patient } = usePatient();
+  const { colors } = useTheme();
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
@@ -50,14 +53,14 @@ export function AiScreen() {
     const fmt = (items: RecordItem[]) =>
       items
         .slice(0, 3)
-        .map(i => `• ${i.title} (${formatDate(i.date)})${i.description ? ` — ${i.description}` : ''}`)
-        .join('\n') || '• Qeyd yoxdur';
+        .map(i => `• ${i.title} (${formatDate(i.date, language)})${i.description ? ` — ${i.description}` : ''}`)
+        .join('\n') || `• ${t('ai.noRecords')}`;
 
     const reply = [
-      `${patientFullName(patient) || 'Pasiyent'} üzrə tibbi xülasə:`,
-      `\nŞikayətlər (${complaints.length}):\n${fmt(complaints)}`,
-      `\nDiaqnozlar (${diagnoses.length}):\n${fmt(diagnoses)}`,
-      `\nMüalicələr (${treatments.length}):\n${fmt(treatments)}`,
+      `${patientFullName(patient) || t('ai.notSelected')} ${t('ai.summaryPrefix')}`,
+      `\n${t('record.complaints')} (${complaints.length}):\n${fmt(complaints)}`,
+      `\n${t('record.diagnoses')} (${diagnoses.length}):\n${fmt(diagnoses)}`,
+      `\n${t('record.treatments')} (${treatments.length}):\n${fmt(treatments)}`,
     ].join('\n');
 
     setMessages(prev => [
@@ -69,8 +72,8 @@ export function AiScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
-      <ScreenHeader title="AI köməkçi və xülasə" />
+    <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
+      <ScreenHeader title={t('ai.screenTitle')} />
 
       <KeyboardLiftView>
         {loading ? (
@@ -84,33 +87,32 @@ export function AiScreen() {
               <View className="flex-row items-center">
                 <IconTile icon={Brain} tint="purple" size={48} variant="tile" />
                 <View className="ml-3 flex-1">
-                  <Text className="text-base font-bold text-ink">
-                    AI Tibbi Xülasə
+                  <Text style={{ color: colors.text }} className="text-base font-bold">
+                    {t('ai.cardTitle')}
                   </Text>
-                  <Text className="mt-0.5 text-xs text-ink-muted">
-                    {patientFullName(patient) || 'Pasiyent seçilməyib'}
+                  <Text style={{ color: colors.textMuted }} className="mt-0.5 text-xs">
+                    {patientFullName(patient) || t('ai.notSelected')}
                   </Text>
                 </View>
               </View>
 
-              <Text className="mt-3 text-sm leading-5 text-ink-muted">
-                Pasiyentin şikayətləri ({data?.complaints.length ?? 0}), diaqnoz sənədləri (
-                {data?.diagnoses.length ?? 0}) və müalicə planları ({data?.treatments.length ?? 0})
-                əsasında avtomatik icmal.
+              <Text style={{ color: colors.textMuted }} className="mt-3 text-sm leading-5">
+                {`${patientFullName(patient) || t('ai.notSelected')} (${data?.complaints.length ?? 0} ${t('record.complaints').toLowerCase()}, ${data?.diagnoses.length ?? 0} ${t('record.diagnoses').toLowerCase()}, ${data?.treatments.length ?? 0} ${t('record.treatments').toLowerCase()})`}
               </Text>
 
               <View className="mt-3 flex-row flex-wrap gap-2">
                 {[
-                  'Son şikayətləri xülasə et',
-                  'Aktiv müalicə planı nədir?',
-                  'Son diaqnoz nəticələri',
+                  t('ai.prompt1'),
+                  t('ai.prompt2'),
+                  t('ai.prompt3'),
                 ].map(prompt => (
                   <Pressable
                     key={prompt}
                     onPress={() => answerQuestion(prompt)}
-                    className="flex-row items-center rounded-xl bg-field px-3 py-2">
+                    style={{ backgroundColor: colors.field }}
+                    className="flex-row items-center rounded-xl px-3 py-2 active:opacity-75">
                     <Sparkles size={13} color={colors.primary} />
-                    <Text className="ml-1.5 text-xs font-medium text-ink">{prompt}</Text>
+                    <Text style={{ color: colors.text }} className="ml-1.5 text-xs font-medium">{prompt}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -119,22 +121,25 @@ export function AiScreen() {
             {data && (
               <>
                 <SummarySection
-                  title="Son şikayətlər"
+                  title={t('ai.recentComplaints')}
                   icon={FileText}
                   tint="blue"
                   items={data.complaints}
+                  language={language}
                 />
                 <SummarySection
-                  title="Son diaqnozlar"
+                  title={t('ai.recentDiagnoses')}
                   icon={Stethoscope}
                   tint="green"
                   items={data.diagnoses}
+                  language={language}
                 />
                 <SummarySection
-                  title="Son müalicələr"
+                  title={t('ai.recentTreatments')}
                   icon={Pill}
                   tint="orange"
                   items={data.treatments}
+                  language={language}
                 />
               </>
             )}
@@ -142,15 +147,15 @@ export function AiScreen() {
             {messages.map(m => (
               <View
                 key={m.id}
-                className={`mb-3 max-w-[88%] rounded-2xl p-3.5 ${
+                style={
                   m.role === 'user'
-                    ? 'self-end bg-primary'
-                    : 'self-start border border-line bg-surface'
-                }`}>
+                    ? { backgroundColor: colors.primary }
+                    : { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }
+                }
+                className="mb-3 max-w-[88%] rounded-2xl p-3.5 self-start">
                 <Text
-                  className={`text-sm leading-5 ${
-                    m.role === 'user' ? 'text-white' : 'text-ink'
-                  }`}>
+                  style={{ color: m.role === 'user' ? '#ffffff' : colors.text }}
+                  className="text-sm leading-5">
                   {m.text}
                 </Text>
               </View>
@@ -158,17 +163,20 @@ export function AiScreen() {
           </ScrollView>
         )}
 
-        <View className="flex-row items-center border-t border-line bg-surface px-4 py-2.5">
+        <View
+          style={{ backgroundColor: colors.surface, borderTopColor: colors.border }}
+          className="flex-row items-center border-t px-4 py-2.5">
           <TextInput
             value={question}
             onChangeText={setQuestion}
-            placeholder="AI-dan soruşun..."
+            placeholder={t('ai.inputPlh')}
             placeholderTextColor={colors.textLight}
-            className="mr-2 flex-1 rounded-xl bg-field px-3.5 py-2.5 text-sm text-ink"
+            style={{ backgroundColor: colors.field, color: colors.text }}
+            className="mr-2 flex-1 rounded-xl px-3.5 py-2.5 text-sm"
           />
           <Pressable
             onPress={() => answerQuestion(question)}
-            className="h-10 w-10 items-center justify-center rounded-xl bg-primary">
+            className="h-10 w-10 items-center justify-center rounded-xl bg-primary active:opacity-80">
             <Send size={18} color="#fff" />
           </Pressable>
         </View>
@@ -182,12 +190,15 @@ function SummarySection({
   icon,
   tint,
   items,
+  language,
 }: {
   title: string;
   icon: typeof FileText;
   tint: 'blue' | 'green' | 'orange';
   items: RecordItem[];
+  language?: string;
 }) {
+  const { colors } = useTheme();
   if (!items.length) {
     return null;
   }
@@ -195,13 +206,13 @@ function SummarySection({
     <Card className="mb-3 p-3.5">
       <View className="mb-2 flex-row items-center">
         <IconTile icon={icon} tint={tint} size={32} variant="soft" />
-        <Text className="ml-2.5 text-sm font-bold text-ink">{title}</Text>
+        <Text style={{ color: colors.text }} className="ml-2.5 text-sm font-bold">{title}</Text>
       </View>
       {items.slice(0, 3).map(i => (
-        <View key={i.id} className="mt-1.5 border-t border-line pt-1.5">
-          <Text className="text-sm font-medium text-ink">{i.title}</Text>
-          <Text className="text-xs text-ink-muted">
-            {formatDate(i.date)}
+        <View key={i.id} style={{ borderTopColor: colors.border }} className="mt-1.5 border-t pt-1.5">
+          <Text style={{ color: colors.text }} className="text-sm font-medium">{i.title}</Text>
+          <Text style={{ color: colors.textMuted }} className="text-xs">
+            {formatDate(i.date, language)}
             {i.description ? ` • ${i.description}` : ''}
           </Text>
         </View>

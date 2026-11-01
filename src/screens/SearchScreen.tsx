@@ -1,91 +1,139 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Search as SearchIcon } from 'lucide-react-native';
+import { patientsApi } from '../api/services';
+import type { Patient } from '../api/types';
 import { RecordCard } from '../components/RecordCard';
 import {
   EmptyState,
   ErrorBanner,
-  FilterChips,
   Loading,
   SearchBar,
-  type ChipOption,
 } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { usePatient } from '../context/PatientContext';
+import { useTheme } from '../context/ThemeContext';
 import { RECORDS, type RecordItem, type RecordKind } from '../features/records';
 import { useDebounced, useFocusData } from '../utils/hooks';
 
-type Scope = 'all' | RecordKind;
-
-const SCOPES: ChipOption<Scope>[] = [
-  { value: 'all', label: 'Hamısı' },
-  { value: 'complaint', label: 'Şikayətlər' },
-  { value: 'examination', label: 'Müayinələr' },
-  { value: 'diagnosis', label: 'Diaqnoz' },
-  { value: 'treatment', label: 'Müalicə' },
-];
+interface SearchResultItem {
+  kind: RecordKind;
+  item: RecordItem;
+  patientId: string;
+  patientName: string;
+}
 
 export function SearchScreen() {
   const navigation = useNavigation();
-  const { patient } = usePatient();
+  const { patient, patients, select } = usePatient();
+  const { t } = useLanguage();
+  const { colors } = useTheme();
   const [query, setQuery] = useState('');
-  const [scope, setScope] = useState<Scope>('all');
-  const debounced = useDebounced(query, 300);
+  const debounced = useDebounced(query, 250);
 
   const {
-    data: results,
+    data: allRecords,
     loading,
     refreshing,
     error,
     reload,
   } = useFocusData(async () => {
-    if (!patient) {
+    let targetList: Patient[] = [];
+    if (patients && patients.length > 0) {
+      targetList = patients;
+    } else {
+      const list = await patientsApi.list().catch(() => []);
+      targetList = list;
+    }
+    if (targetList.length === 0 && patient) {
+      targetList = [patient];
+    }
+    if (targetList.length === 0) {
       return [];
     }
-    const q = debounced.trim() || undefined;
-    const [complaints, examinations, diagnoses, treatments] = await Promise.all([
-      RECORDS.complaint.api.list(patient.id, undefined, q),
-      RECORDS.examination.api.list(patient.id, undefined, q),
-      RECORDS.diagnosis.api.list(patient.id, undefined, q),
-      RECORDS.treatment.api.list(patient.id, undefined, q),
-    ]);
-    return [
-      ...complaints.map(item => ({ kind: 'complaint' as const, item })),
-      ...examinations.map(item => ({ kind: 'examination' as const, item })),
-      ...diagnoses.map(item => ({ kind: 'diagnosis' as const, item })),
-      ...treatments.map(item => ({ kind: 'treatment' as const, item })),
-    ];
-  }, [patient?.id, debounced]);
 
-  const filtered = useMemo(
-    () => (results ?? []).filter(r => scope === 'all' || r.kind === scope),
-    [results, scope],
-  );
+    const list: SearchResultItem[] = [];
+    await Promise.all(
+      targetList.map(async p => {
+        try {
+          const pName = `${p.firstName} ${p.lastName}`.trim();
+          const [complaints, examinations, diagnoses, treatments] = await Promise.all([
+            RECORDS.complaint.api.list(p.id).catch(() => []),
+            RECORDS.examination.api.list(p.id).catch(() => []),
+            RECORDS.diagnosis.api.list(p.id).catch(() => []),
+            RECORDS.treatment.api.list(p.id).catch(() => []),
+          ]);
+          for (const item of complaints) {
+            list.push({ kind: 'complaint', item, patientId: p.id, patientName: pName });
+          }
+          for (const item of examinations) {
+            list.push({ kind: 'examination', item, patientId: p.id, patientName: pName });
+          }
+          for (const item of diagnoses) {
+            list.push({ kind: 'diagnosis', item, patientId: p.id, patientName: pName });
+          }
+          for (const item of treatments) {
+            list.push({ kind: 'treatment', item, patientId: p.id, patientName: pName });
+          }
+        } catch {
+          // Ignore error for individual patient
+        }
+      }),
+    );
+
+    // Sort newest first
+    list.sort((a, b) => {
+      const da = new Date(a.item.date).getTime() || 0;
+      const db = new Date(b.item.date).getTime() || 0;
+      return db - da;
+    });
+
+    return list;
+  }, [patient?.id, patients?.length]);
+
+  useEffect(() => {
+    reload();
+  }, [patient?.id, patients?.length]);
+
+  const filtered = useMemo(() => {
+    const list = allRecords ?? [];
+    const q = debounced.trim().toLowerCase();
+    if (!q) {
+      return list;
+    }
+    return list.filter(r => {
+      const matchTitle = r.item.title?.toLowerCase().includes(q);
+      const matchDesc = r.item.description?.toLowerCase().includes(q);
+      const matchPatient = r.patientName?.toLowerCase().includes(q);
+      const matchKind = r.kind.toLowerCase().includes(q);
+      const matchFiles = r.item.files?.some(f => f.fileName?.toLowerCase().includes(q));
+      return matchTitle || matchDesc || matchPatient || matchKind || matchFiles;
+    });
+  }, [allRecords, debounced]);
 
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
+    <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }} className="flex-1">
       <View className="px-5 pt-3 pb-3">
-        <Text className="text-2xl font-bold text-ink">Axtarış</Text>
+        <Text style={{ color: colors.text }} className="text-2xl font-bold">{t('search.title')}</Text>
       </View>
 
       <SearchBar
-        placeholder="Şikayət, diaqnoz və ya müalicə axtar..."
+        placeholder={t('search.placeholder')}
         value={query}
         onChangeText={setQuery}
         autoFocus={false}
       />
 
-      <FilterChips options={SCOPES} value={scope} onChange={setScope} />
-
       {error && <ErrorBanner message={error} onRetry={reload} />}
 
-      {loading ? (
+      {loading && !allRecords ? (
         <Loading />
       ) : (
-        <FlatList<{ kind: RecordKind; item: RecordItem }>
+        <FlatList<SearchResultItem>
           data={filtered}
-          keyExtractor={r => `${r.kind}-${r.item.id}`}
+          keyExtractor={r => `${r.patientId}-${r.kind}-${r.item.id}`}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={{ paddingTop: 4, paddingBottom: 32 }}
@@ -94,25 +142,32 @@ export function SearchScreen() {
             <RecordCard
               kind={row.kind}
               item={row.item}
-              onPress={() =>
+              patientName={row.patientName}
+              onPress={async () => {
+                if (row.patientId) {
+                  await select(row.patientId);
+                }
                 navigation.navigate('RecordDetail', {
                   kind: row.kind,
                   id: row.item.id,
-                })
-              }
-              onEdit={() =>
+                });
+              }}
+              onEdit={async () => {
+                if (row.patientId) {
+                  await select(row.patientId);
+                }
                 navigation.navigate('RecordForm', {
                   kind: row.kind,
                   id: row.item.id,
-                })
-              }
+                });
+              }}
             />
           )}
           ListEmptyComponent={
             <EmptyState
               icon={SearchIcon}
-              title="Nəticə tapılmadı"
-              text="Axtarış sözünü dəyişərək yenidən yoxlayın."
+              title={t('search.emptyTitle')}
+              text={t('search.emptyDesc')}
             />
           }
         />
@@ -120,4 +175,3 @@ export function SearchScreen() {
     </SafeAreaView>
   );
 }
-

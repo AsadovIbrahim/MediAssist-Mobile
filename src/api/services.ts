@@ -1,4 +1,5 @@
 import { http } from './client';
+import { offlineStorage } from '../utils/offlineStorage';
 import type {
   Appointment,
   AppointmentInput,
@@ -43,12 +44,153 @@ export const authApi = {
 };
 
 export const patientsApi = {
-  list: (search?: string) => http.get<Patient[]>('patients', { search }),
-  get: (id: string) => http.get<Patient>(`patients/${id}`),
-  dashboard: (id: string) => http.get<PatientDashboard>(`patients/${id}/dashboard`),
-  create: (dto: PatientInput) => http.post<Patient>('patients', dto),
-  update: (id: string, dto: PatientInput) => http.put<Patient>(`patients/${id}`, dto),
-  remove: (id: string) => http.delete(`patients/${id}`),
+  list: async (search?: string): Promise<Patient[]> => {
+    try {
+      const remote = await http.get<Patient[]>('patients', { search });
+      if (!search) {
+        await offlineStorage.savePatients(remote);
+      }
+      return remote;
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const cached = await offlineStorage.getPatients();
+        if (cached) {
+          if (search) {
+            const s = search.toLowerCase();
+            return cached.filter(
+              p =>
+                p.firstName.toLowerCase().includes(s) ||
+                p.lastName.toLowerCase().includes(s) ||
+                p.phone.includes(s),
+            );
+          }
+          return cached;
+        }
+      }
+      throw e;
+    }
+  },
+  get: async (id: string): Promise<Patient> => {
+    try {
+      return await http.get<Patient>(`patients/${id}`);
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const cached = await offlineStorage.getPatients();
+        const found = cached?.find(p => p.id === id);
+        if (found) {
+          return found;
+        }
+      }
+      throw e;
+    }
+  },
+  dashboard: async (id: string): Promise<PatientDashboard> => {
+    try {
+      const remote = await http.get<PatientDashboard>(`patients/${id}/dashboard`);
+      await offlineStorage.saveDashboard(id, remote);
+      return remote;
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const cached = await offlineStorage.getDashboard(id);
+        if (cached) {
+          return cached;
+        }
+      }
+      throw e;
+    }
+  },
+  create: async (dto: PatientInput, photo?: LocalFile): Promise<Patient> => {
+    try {
+      const created = await http.post<Patient>('patients', dto);
+      const cached = (await offlineStorage.getPatients()) || [];
+      await offlineStorage.savePatients([created, ...cached]);
+      return created;
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const localPatient: Patient = {
+          id: `local_p_${Date.now()}`,
+          doctorId: '',
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          phone: dto.phone,
+          dateOfBirth: dto.dateOfBirth,
+          age: dto.dateOfBirth
+            ? new Date().getFullYear() - new Date(dto.dateOfBirth).getFullYear()
+            : null,
+          note: dto.note,
+          photoUrl: photo?.uri ?? null,
+          complaintCount: 0,
+          diagnosisCount: 0,
+          treatmentCount: 0,
+          appointmentCount: 0,
+          createdAt: new Date().toISOString(),
+        };
+        const cached = (await offlineStorage.getPatients()) || [];
+        await offlineStorage.savePatients([localPatient, ...cached]);
+        await offlineStorage.enqueue({
+          type: 'create_patient',
+          payload: dto,
+          files: photo ? [photo] : undefined,
+        });
+        return localPatient;
+      }
+      throw e;
+    }
+  },
+  update: async (id: string, dto: PatientInput, photo?: LocalFile): Promise<Patient> => {
+    try {
+      const updated = await http.put<Patient>(`patients/${id}`, dto);
+      const cached = (await offlineStorage.getPatients()) || [];
+      await offlineStorage.savePatients(cached.map(p => (p.id === id ? updated : p)));
+      return updated;
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const cached = (await offlineStorage.getPatients()) || [];
+        const existing = cached.find(p => p.id === id);
+        const localUpdated: Patient = {
+          id,
+          doctorId: existing?.doctorId ?? '',
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          phone: dto.phone,
+          dateOfBirth: dto.dateOfBirth,
+          age: dto.dateOfBirth
+            ? new Date().getFullYear() - new Date(dto.dateOfBirth).getFullYear()
+            : existing?.age ?? null,
+          note: dto.note,
+          photoUrl: photo?.uri ?? existing?.photoUrl ?? null,
+          complaintCount: existing?.complaintCount ?? 0,
+          diagnosisCount: existing?.diagnosisCount ?? 0,
+          treatmentCount: existing?.treatmentCount ?? 0,
+          appointmentCount: existing?.appointmentCount ?? 0,
+          createdAt: existing?.createdAt ?? new Date().toISOString(),
+        };
+        await offlineStorage.savePatients(cached.map(p => (p.id === id ? localUpdated : p)));
+        await offlineStorage.enqueue({
+          type: 'update_patient',
+          patientId: id,
+          payload: dto,
+          files: photo ? [photo] : undefined,
+        });
+        return localUpdated;
+      }
+      throw e;
+    }
+  },
+  remove: async (id: string) => {
+    try {
+      await http.delete(`patients/${id}`);
+      const cached = (await offlineStorage.getPatients()) || [];
+      await offlineStorage.savePatients(cached.filter(p => p.id !== id));
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const cached = (await offlineStorage.getPatients()) || [];
+        await offlineStorage.savePatients(cached.filter(p => p.id !== id));
+        return;
+      }
+      throw e;
+    }
+  },
   uploadPhoto: (id: string, file: LocalFile) =>
     http.upload<{ photoUrl: string }>(`patients/${id}/photo`, file),
 };
@@ -148,11 +290,76 @@ export const treatmentsApi = {
 };
 
 export const appointmentsApi = {
-  range: (patientId: string, startDate: string, endDate: string) =>
-    http.get<Appointment[]>('appointments', { patientId, startDate, endDate }),
-  create: (dto: AppointmentInput) => http.post<Appointment>('appointments', dto),
-  update: (id: string, dto: Omit<AppointmentInput, 'patientId'>) =>
-    http.put<Appointment>(`appointments/${id}`, dto),
+  range: async (patientId: string, startDate: string, endDate: string): Promise<Appointment[]> => {
+    try {
+      const remote = await http.get<Appointment[]>('appointments', {
+        patientId,
+        startDate,
+        endDate,
+      });
+      await offlineStorage.saveAppointments(patientId, remote);
+      return remote;
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const cached = await offlineStorage.getAppointments(patientId);
+        if (cached) {
+          return cached;
+        }
+      }
+      throw e;
+    }
+  },
+  create: async (dto: AppointmentInput): Promise<Appointment> => {
+    try {
+      const created = await http.post<Appointment>('appointments', dto);
+      const cached = (await offlineStorage.getAppointments(dto.patientId)) || [];
+      await offlineStorage.saveAppointments(dto.patientId, [created, ...cached]);
+      return created;
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        const localApp: Appointment = {
+          id: `local_app_${Date.now()}`,
+          patientId: dto.patientId,
+          patientName: null,
+          doctorId: null,
+          doctorName: null,
+          doctorSpecialty: null,
+          title: dto.title,
+          location: dto.location,
+          dateTime: dto.dateTime,
+          notes: dto.notes,
+          type: dto.type,
+          createdAt: new Date().toISOString(),
+        };
+        const cached = (await offlineStorage.getAppointments(dto.patientId)) || [];
+        await offlineStorage.saveAppointments(dto.patientId, [localApp, ...cached]);
+        await offlineStorage.enqueue({
+          type: 'create_appointment',
+          payload: dto,
+        });
+        return localApp;
+      }
+      throw e;
+    }
+  },
+  update: async (
+    id: string,
+    dto: Omit<AppointmentInput, 'patientId'> & { doctorId?: string | null },
+  ): Promise<Appointment | undefined> => {
+    try {
+      return await http.put<Appointment>(`appointments/${id}`, dto);
+    } catch (e: any) {
+      if (e?.status === 0 || !e?.status) {
+        await offlineStorage.enqueue({
+          type: 'update_appointment',
+          recordId: id,
+          payload: dto,
+        });
+        return undefined;
+      }
+      throw e;
+    }
+  },
   remove: (id: string) => http.delete(`appointments/${id}`),
 };
 

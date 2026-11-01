@@ -1,38 +1,44 @@
 // Date helpers. The backend stores plain (timezone-less) DateTime values,
 // so the app treats them as local "wall clock" times.
 
-export const MONTHS = [
-  'Yanvar',
-  'Fevral',
-  'Mart',
-  'Aprel',
-  'May',
-  'İyun',
-  'İyul',
-  'Avqust',
-  'Sentyabr',
-  'Oktyabr',
-  'Noyabr',
-  'Dekabr',
-];
+export const MONTHS_BY_LANG: Record<string, string[]> = {
+  az: [
+    'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun',
+    'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr',
+  ],
+  en: [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ],
+  ru: [
+    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+  ],
+};
 
-export const MONTHS_SHORT = [
-  'Yan',
-  'Fev',
-  'Mar',
-  'Apr',
-  'May',
-  'İyn',
-  'İyl',
-  'Avq',
-  'Sen',
-  'Okt',
-  'Noy',
-  'Dek',
-];
+export const MONTHS_SHORT_BY_LANG: Record<string, string[]> = {
+  az: ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'İyn', 'İyl', 'Avq', 'Sen', 'Okt', 'Noy', 'Dek'],
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  ru: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
+};
 
-/** Monday-first week day labels. */
-export const WEEKDAYS = ['B.e', 'Ç.a', 'Ç', 'C.a', 'C', 'Ş', 'B'];
+export const WEEKDAYS_BY_LANG: Record<string, string[]> = {
+  az: ['B.e', 'Ç.a', 'Ç', 'C.a', 'C', 'Ş', 'B'],
+  en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+  ru: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+};
+
+export function getMonthNames(lang: string = 'az'): string[] {
+  return MONTHS_BY_LANG[lang] || MONTHS_BY_LANG.az;
+}
+
+export function getWeekdays(lang: string = 'az'): string[] {
+  return WEEKDAYS_BY_LANG[lang] || WEEKDAYS_BY_LANG.az;
+}
+
+export const MONTHS = MONTHS_BY_LANG.az;
+export const MONTHS_SHORT = MONTHS_SHORT_BY_LANG.az;
+export const WEEKDAYS = WEEKDAYS_BY_LANG.az;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -64,17 +70,19 @@ export function toApiDate(d: Date): string {
 }
 
 /** 12 Okt 2026 */
-export function formatDate(value: string | Date): string {
+export function formatDate(value: string | Date, lang: string = 'az'): string {
   const d = typeof value === 'string' ? parseDate(value) : value;
   if (isNaN(d.getTime())) {
     return '';
   }
-  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+  const months = MONTHS_SHORT_BY_LANG[lang] || MONTHS_SHORT_BY_LANG.az;
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 /** 12 Oktyabr 2026 */
-export function formatDateLong(d: Date): string {
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+export function formatDateLong(d: Date, lang: string = 'az'): string {
+  const months = MONTHS_BY_LANG[lang] || MONTHS_BY_LANG.az;
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 /** 10:00 */

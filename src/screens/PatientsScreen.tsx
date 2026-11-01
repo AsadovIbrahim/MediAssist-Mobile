@@ -22,11 +22,14 @@ import {
   ScreenHeader,
   SearchBar,
 } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { patientFullName, usePatient } from '../context/PatientContext';
+import { useTheme } from '../context/ThemeContext';
 import type { RootScreenProps } from '../navigation/types';
-import { colors, tints } from '../theme';
 
 export function PatientsScreen({ navigation }: RootScreenProps<'Patients'>) {
+  const { t } = useLanguage();
+  const { colors, tints } = useTheme();
   const { patients, patient: selected, loading, error, refresh, select } = usePatient();
   const [search, setSearch] = useState('');
 
@@ -43,17 +46,17 @@ export function PatientsScreen({ navigation }: RootScreenProps<'Patients'>) {
   }, [patients, search]);
 
   const confirmDelete = (p: Patient) => {
-    Alert.alert('Pasiyent silinsin?', patientFullName(p), [
-      { text: 'Ləğv et', style: 'cancel' },
+    Alert.alert(t('home.deleteConfirmTitle'), patientFullName(p), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sil',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
             await patientsApi.remove(p.id);
             await refresh();
           } catch (e) {
-            Alert.alert('Xəta', (e as Error).message);
+            Alert.alert(t('common.error'), (e as Error).message);
           }
         },
       },
@@ -61,14 +64,14 @@ export function PatientsScreen({ navigation }: RootScreenProps<'Patients'>) {
   };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
+    <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScreenHeader
-        title="Pasiyentlər"
-        right={<AddButton onPress={() => navigation.navigate('PatientForm')} />}
+        title={t('profile.patients')}
+        right={<AddButton label={t('common.add')} onPress={() => navigation.navigate('PatientForm')} />}
       />
 
       <SearchBar
-        placeholder="Pasiyent adı və ya telefon..."
+        placeholder={t('home.searchPlaceholder')}
         value={search}
         onChangeText={setSearch}
       />
@@ -107,12 +110,12 @@ export function PatientsScreen({ navigation }: RootScreenProps<'Patients'>) {
               )}
 
               <View className="ml-3 flex-1">
-                <Text className="text-[15px] font-semibold text-ink">
+                <Text style={{ color: colors.text }} className="text-[15px] font-semibold">
                   {patientFullName(item)}
                 </Text>
-                <Text className="mt-0.5 text-xs text-ink-muted">
+                <Text style={{ color: colors.textMuted }} className="mt-0.5 text-xs">
                   {item.phone}
-                  {item.age ? ` • ${item.age} yaş` : ''}
+                  {item.age ? ` • ${item.age} ${t('home.ageSuffix')}` : ''}
                 </Text>
               </View>
 
@@ -137,11 +140,11 @@ export function PatientsScreen({ navigation }: RootScreenProps<'Patients'>) {
         ListEmptyComponent={
           <EmptyState
             icon={Users}
-            title="Pasiyent yoxdur"
-            text="Yeni pasiyent əlavə edərək tibbi qeydləri idarə edin."
+            title={t('home.noPatients')}
+            text={t('home.noPatientsDesc')}
             action={
               <Button
-                label="Pasiyent əlavə et"
+                label={t('home.newPatient')}
                 icon={UserPlus}
                 onPress={() => navigation.navigate('PatientForm')}
               />

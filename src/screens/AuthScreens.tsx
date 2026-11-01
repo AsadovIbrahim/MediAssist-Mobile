@@ -16,10 +16,10 @@ import {
 } from 'lucide-react-native';
 import { authApi } from '../api/services';
 import { AnimatedPulseLogo } from '../components/AnimatedSplash';
-import { Button, Field, KeyboardScrollView } from '../components/ui';
+import { Button, Field, KeyboardScrollView, PhoneField } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import type { RootScreenProps } from '../navigation/types';
-import { colors } from '../theme';
 
 type TextInputNode = React.ComponentRef<typeof TextInput>;
 
@@ -27,6 +27,7 @@ const OTP_LENGTH = 6;
 const RESEND_COOLDOWN_SEC = 60;
 
 export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
+  const { colors } = useTheme();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,12 +35,12 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
 
   const onSubmit = async () => {
     if (!email.trim() || !password) {
-      Alert.alert('Diqqət', 'E-poçt və şifrəni daxil edin.');
+      Alert.alert('Diqqət', 'E-poçt (və ya nömrə) və şifrəni daxil edin.');
       return;
     }
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email.trim(), password);
     } catch (e) {
       const msg = (e as Error).message || '';
       if (msg.startsWith('OTP_REQUIRED|')) {
@@ -57,7 +58,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas">
+    <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
       <KeyboardScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
         className="px-6 py-8">
@@ -65,17 +66,17 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
           <View className="mb-4">
             <AnimatedPulseLogo size={84} showRipples />
           </View>
-          <Text className="text-2xl font-bold text-ink">MediAssist</Text>
-          <Text className="mt-1 text-center text-sm text-ink-muted">
+          <Text style={{ color: colors.text }} className="text-2xl font-bold">MediAssist</Text>
+          <Text style={{ color: colors.textMuted }} className="mt-1 text-center text-sm">
             Şəxsi tibbi sənəd və müayinələrin idarə edilməsi
           </Text>
         </View>
 
-        <View className="rounded-2xl border border-line bg-surface p-5">
+        <View style={{ backgroundColor: colors.surface, borderColor: colors.border }} className="rounded-2xl border p-5">
           <Field
-            label="E-poçt"
-            placeholder="E-poçt ünvanınızı daxil edin"
-            keyboardType="email-address"
+            label="E-poçt və ya Nömrə"
+            placeholder="E-poçt və ya mobil nömrənizi daxil edin"
+            keyboardType="default"
             autoCapitalize="none"
             autoCorrect={false}
             value={email}
@@ -109,7 +110,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
         </View>
 
         <View className="mt-6 flex-row justify-center">
-          <Text className="text-sm text-ink-muted">Hesabınız yoxdur? </Text>
+          <Text style={{ color: colors.textMuted }} className="text-sm">Hesabınız yoxdur? </Text>
           <Pressable onPress={() => navigation.navigate('Register')}>
             <Text className="text-sm font-semibold text-primary">Qeydiyyatdan keçin</Text>
           </Pressable>
@@ -120,6 +121,7 @@ export function LoginScreen({ navigation }: RootScreenProps<'Login'>) {
 }
 
 export function RegisterScreen({ navigation }: RootScreenProps<'Register'>) {
+  const { colors } = useTheme();
   const { register } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -176,21 +178,22 @@ export function RegisterScreen({ navigation }: RootScreenProps<'Register'>) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas">
+    <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
       <KeyboardScrollView className="px-6 py-6">
         <Pressable
           onPress={() => navigation.goBack()}
           hitSlop={10}
-          className="mb-4 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface">
+          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          className="mb-4 h-10 w-10 items-center justify-center rounded-xl border">
           <ArrowLeft size={20} color={colors.text} />
         </Pressable>
 
-        <Text className="text-2xl font-bold text-ink">Həkim qeydiyyatı</Text>
-        <Text className="mt-1 mb-6 text-sm text-ink-muted">
+        <Text style={{ color: colors.text }} className="text-2xl font-bold">Həkim qeydiyyatı</Text>
+        <Text style={{ color: colors.textMuted }} className="mt-1 mb-6 text-sm">
           Yeni hesab yaradaraq pasiyentlərinizi idarə edin
         </Text>
 
-        <View className="rounded-2xl border border-line bg-surface p-5">
+        <View style={{ backgroundColor: colors.surface, borderColor: colors.border }} className="rounded-2xl border p-5">
           <Field
             label="Ad *"
             placeholder="Adınızı daxil edin"
@@ -211,10 +214,8 @@ export function RegisterScreen({ navigation }: RootScreenProps<'Register'>) {
             value={email}
             onChangeText={setEmail}
           />
-          <Field
+          <PhoneField
             label="Telefon *"
-            placeholder="+994 XX XXX XX XX"
-            keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
           />
@@ -249,7 +250,7 @@ export function RegisterScreen({ navigation }: RootScreenProps<'Register'>) {
         </View>
 
         <View className="mt-5 mb-8 flex-row justify-center">
-          <Text className="text-sm text-ink-muted">Artıq hesabınız var? </Text>
+          <Text style={{ color: colors.textMuted }} className="text-sm">Artıq hesabınız var? </Text>
           <Pressable onPress={() => navigation.goBack()}>
             <Text className="text-sm font-semibold text-primary">Daxil olun</Text>
           </Pressable>
@@ -263,6 +264,7 @@ export function OtpVerificationScreen({
   navigation,
   route,
 }: RootScreenProps<'OtpVerification'>) {
+  const { colors } = useTheme();
   const { email } = route.params;
   const { verifyOtp, resendOtp } = useAuth();
 
@@ -374,29 +376,31 @@ export function OtpVerificationScreen({
   ).padStart(2, '0')}`;
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas">
+    <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
       <KeyboardScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
         className="px-6 py-6">
         <Pressable
           onPress={() => navigation.goBack()}
-          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface">
+          hitSlop={10}
+          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border">
           <ArrowLeft size={20} color={colors.text} />
         </Pressable>
 
         <View className="mb-6 items-center">
-          <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-primary-soft">
+          <View style={{ backgroundColor: colors.primarySoft }} className="mb-4 h-16 w-16 items-center justify-center rounded-2xl">
             <ShieldCheck size={34} color={colors.primary} />
           </View>
-          <Text className="text-2xl font-bold text-ink">OTP Təsdiqləmə</Text>
-          <Text className="mt-2 text-center text-sm leading-5 text-ink-muted">
+          <Text style={{ color: colors.text }} className="text-2xl font-bold">OTP Təsdiqləmə</Text>
+          <Text style={{ color: colors.textMuted }} className="mt-2 text-center text-sm leading-5">
             Qeydiyyatı tamamlamaq üçün{' '}
-            <Text className="font-semibold text-ink">{email}</Text> e-poçt ünvanına
+            <Text style={{ color: colors.text }} className="font-semibold">{email}</Text> e-poçt ünvanına
             göndərilən 6 rəqəmli kodu daxil edin
           </Text>
         </View>
 
-        <View className="rounded-2xl border border-line bg-surface p-5">
+        <View style={{ backgroundColor: colors.surface, borderColor: colors.border }} className="rounded-2xl border p-5">
           <View className="mb-6 flex-row justify-between gap-2">
             {digits.map((digit, index) => {
               const isFilled = Boolean(digit);
@@ -414,11 +418,12 @@ export function OtpVerificationScreen({
                   textContentType="oneTimeCode"
                   autoComplete="sms-otp"
                   selectTextOnFocus
-                  className={`h-13 flex-1 rounded-xl border text-center text-xl font-bold text-ink ${
-                    isFilled
-                      ? 'border-primary bg-primary-soft/40'
-                      : 'border-line bg-canvas'
-                  }`}
+                  style={{
+                    backgroundColor: isFilled ? colors.primarySoft : colors.field,
+                    borderColor: isFilled ? colors.primary : colors.border,
+                    color: colors.text,
+                  }}
+                  className="h-13 flex-1 rounded-xl border text-center text-xl font-bold"
                 />
               );
             })}
@@ -434,9 +439,9 @@ export function OtpVerificationScreen({
 
           <View className="mt-5 items-center">
             {secondsLeft > 0 ? (
-              <Text className="text-xs text-ink-muted">
+              <Text style={{ color: colors.textMuted }} className="text-xs">
                 Yeni kod göndərmək üçün gözləyin:{' '}
-                <Text className="font-semibold text-ink">{formattedTimer}</Text>
+                <Text style={{ color: colors.text }} className="font-semibold">{formattedTimer}</Text>
               </Text>
             ) : (
               <Pressable
@@ -460,13 +465,14 @@ export function ForgotPasswordScreen({
   navigation,
   route,
 }: RootScreenProps<'ForgotPassword'>) {
+  const { colors } = useTheme();
   const [email, setEmail] = useState(route.params?.initialEmail ?? '');
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
     const cleanEmail = email.trim();
     if (!cleanEmail) {
-      Alert.alert('Diqqət', 'Zəhmət olmasa e-poçt ünvanınızı daxil edin.');
+      Alert.alert('Diqqət', 'Zəhmət olmasa e-poçt ünvanınızı və ya mobil nömrənizi daxil edin.');
       return;
     }
 
@@ -482,32 +488,34 @@ export function ForgotPasswordScreen({
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas">
+    <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
       <KeyboardScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
         className="px-6 py-6">
         <Pressable
           onPress={() => navigation.goBack()}
-          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface">
+          hitSlop={10}
+          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border">
           <ArrowLeft size={20} color={colors.text} />
         </Pressable>
 
         <View className="mb-6 items-center">
-          <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-primary-soft">
+          <View style={{ backgroundColor: colors.primarySoft }} className="mb-4 h-16 w-16 items-center justify-center rounded-2xl">
             <KeyRound size={34} color={colors.primary} />
           </View>
-          <Text className="text-2xl font-bold text-ink">Şifrəni unutmusunuz?</Text>
-          <Text className="mt-2 text-center text-sm leading-5 text-ink-muted">
-            Qeydiyyatdan keçdiyiniz e-poçt ünvanını daxil edin. Şifrəni yeniləmək üçün
-            e-poçtunuza 6 rəqəmli təsdiq kodu göndəriləcək.
+          <Text style={{ color: colors.text }} className="text-2xl font-bold">Şifrəni unutmusunuz?</Text>
+          <Text style={{ color: colors.textMuted }} className="mt-2 text-center text-sm leading-5">
+            Qeydiyyatdan keçdiyiniz e-poçt ünvanını və ya nömrəni daxil edin. Şifrəni yeniləmək üçün
+            6 rəqəmli təsdiq kodu göndəriləcək.
           </Text>
         </View>
 
-        <View className="rounded-2xl border border-line bg-surface p-5">
+        <View style={{ backgroundColor: colors.surface, borderColor: colors.border }} className="rounded-2xl border p-5">
           <Field
-            label="E-poçt"
-            placeholder="E-poçt ünvanınızı daxil edin"
-            keyboardType="email-address"
+            label="E-poçt və ya Nömrə"
+            placeholder="E-poçt və ya mobil nömrənizi daxil edin"
+            keyboardType="default"
             autoCapitalize="none"
             autoCorrect={false}
             value={email}
@@ -530,6 +538,7 @@ export function ResetPasswordOtpScreen({
   navigation,
   route,
 }: RootScreenProps<'ResetPasswordOtp'>) {
+  const { colors } = useTheme();
   const { email } = route.params;
 
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
@@ -644,29 +653,31 @@ export function ResetPasswordOtpScreen({
   ).padStart(2, '0')}`;
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas">
+    <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
       <KeyboardScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
         className="px-6 py-6">
         <Pressable
           onPress={() => navigation.goBack()}
-          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface">
+          hitSlop={10}
+          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border">
           <ArrowLeft size={20} color={colors.text} />
         </Pressable>
 
         <View className="mb-6 items-center">
-          <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-primary-soft">
+          <View style={{ backgroundColor: colors.primarySoft }} className="mb-4 h-16 w-16 items-center justify-center rounded-2xl">
             <ShieldCheck size={34} color={colors.primary} />
           </View>
-          <Text className="text-2xl font-bold text-ink">Kodun təsdiqlənməsi</Text>
-          <Text className="mt-2 text-center text-sm leading-5 text-ink-muted">
+          <Text style={{ color: colors.text }} className="text-2xl font-bold">Kodun təsdiqlənməsi</Text>
+          <Text style={{ color: colors.textMuted }} className="mt-2 text-center text-sm leading-5">
             Şifrəni yeniləmək üçün{' '}
-            <Text className="font-semibold text-ink">{email}</Text> e-poçt ünvanına
+            <Text style={{ color: colors.text }} className="font-semibold">{email}</Text> e-poçt ünvanına
             göndərilən 6 rəqəmli kodu daxil edin
           </Text>
         </View>
 
-        <View className="rounded-2xl border border-line bg-surface p-5">
+        <View style={{ backgroundColor: colors.surface, borderColor: colors.border }} className="rounded-2xl border p-5">
           <View className="mb-6 flex-row justify-between gap-2">
             {digits.map((digit, index) => {
               const isFilled = Boolean(digit);
@@ -684,11 +695,12 @@ export function ResetPasswordOtpScreen({
                   textContentType="oneTimeCode"
                   autoComplete="sms-otp"
                   selectTextOnFocus
-                  className={`h-13 flex-1 rounded-xl border text-center text-xl font-bold text-ink ${
-                    isFilled
-                      ? 'border-primary bg-primary-soft/40'
-                      : 'border-line bg-canvas'
-                  }`}
+                  style={{
+                    backgroundColor: isFilled ? colors.primarySoft : colors.field,
+                    borderColor: isFilled ? colors.primary : colors.border,
+                    color: colors.text,
+                  }}
+                  className="h-13 flex-1 rounded-xl border text-center text-xl font-bold"
                 />
               );
             })}
@@ -704,9 +716,9 @@ export function ResetPasswordOtpScreen({
 
           <View className="mt-5 items-center">
             {secondsLeft > 0 ? (
-              <Text className="text-xs text-ink-muted">
+              <Text style={{ color: colors.textMuted }} className="text-xs">
                 Yeni kod göndərmək üçün gözləyin:{' '}
-                <Text className="font-semibold text-ink">{formattedTimer}</Text>
+                <Text style={{ color: colors.text }} className="font-semibold">{formattedTimer}</Text>
               </Text>
             ) : (
               <Pressable
@@ -730,6 +742,7 @@ export function ResetPasswordNewScreen({
   navigation,
   route,
 }: RootScreenProps<'ResetPasswordNew'>) {
+  const { colors } = useTheme();
   const { email, otpCode } = route.params;
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -766,28 +779,30 @@ export function ResetPasswordNewScreen({
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas">
+    <SafeAreaView style={{ backgroundColor: colors.background }} className="flex-1">
       <KeyboardScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
         className="px-6 py-6">
         <Pressable
           onPress={() => navigation.goBack()}
-          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface">
+          hitSlop={10}
+          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          className="mb-6 h-10 w-10 items-center justify-center rounded-xl border">
           <ArrowLeft size={20} color={colors.text} />
         </Pressable>
 
         <View className="mb-6 items-center">
-          <View className="mb-4 h-16 w-16 items-center justify-center rounded-2xl bg-primary-soft">
+          <View style={{ backgroundColor: colors.primarySoft }} className="mb-4 h-16 w-16 items-center justify-center rounded-2xl">
             <LockKeyhole size={34} color={colors.primary} />
           </View>
-          <Text className="text-2xl font-bold text-ink">Yeni şifrə təyin edin</Text>
-          <Text className="mt-2 text-center text-sm leading-5 text-ink-muted">
-            <Text className="font-semibold text-ink">{email}</Text> hesabı üçün yeni
+          <Text style={{ color: colors.text }} className="text-2xl font-bold">Yeni şifrə təyin edin</Text>
+          <Text style={{ color: colors.textMuted }} className="mt-2 text-center text-sm leading-5">
+            <Text style={{ color: colors.text }} className="font-semibold">{email}</Text> hesabı üçün yeni
             şifrənizi daxil edin
           </Text>
         </View>
 
-        <View className="rounded-2xl border border-line bg-surface p-5">
+        <View style={{ backgroundColor: colors.surface, borderColor: colors.border }} className="rounded-2xl border p-5">
           <Field
             label="Yeni şifrə *"
             placeholder="Minimum 6 simvol"

@@ -11,14 +11,17 @@ import { Camera, Image as ImageIcon } from 'lucide-react-native';
 import { fileUrl } from '../api/client';
 import { patientsApi } from '../api/services';
 import type { LocalFile } from '../api/types';
-import { Button, Field, KeyboardScrollView, ScreenHeader } from '../components/ui';
+import { Button, Field, KeyboardScrollView, PhoneField, ScreenHeader } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { usePatient } from '../context/PatientContext';
+import { useTheme } from '../context/ThemeContext';
 import type { RootScreenProps } from '../navigation/types';
-import { colors, tints } from '../theme';
 import { pickImages, takePhoto } from '../utils/media';
 
 export function PatientFormScreen({ navigation, route }: RootScreenProps<'PatientForm'>) {
   const editId = route.params?.id;
+  const { t } = useLanguage();
+  const { colors, tints } = useTheme();
   const { patients, refresh, select } = usePatient();
   const existing = patients.find(p => p.id === editId);
 
@@ -56,16 +59,16 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
   };
 
   const choosePhoto = () => {
-    Alert.alert('Pasiyent şəkli', 'Şəkli necə əlavə etmək istəyirsiniz?', [
-      { text: 'Kamera ilə çək', onPress: handleCamera },
-      { text: 'Qalereyadan seç', onPress: handleGallery },
-      { text: 'Ləğv et', style: 'cancel' },
+    Alert.alert(t('patient.photoTitle'), t('patient.photoPrompt'), [
+      { text: t('patient.takePhoto'), onPress: handleCamera },
+      { text: t('patient.chooseGallery'), onPress: handleGallery },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   };
 
   const onSave = async () => {
     if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
-      Alert.alert('Diqqət', 'Ad, soyad və telefon nömrəsini daxil edin.');
+      Alert.alert(t('common.attention'), t('patient.requiredError'));
       return;
     }
     const year = Number(birthYear);
@@ -84,10 +87,10 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
         note: note.trim() || null,
       };
       const saved = editId
-        ? await patientsApi.update(editId, payload)
-        : await patientsApi.create(payload);
+        ? await patientsApi.update(editId, payload, photo ?? undefined)
+        : await patientsApi.create(payload, photo ?? undefined);
 
-      if (photo) {
+      if (photo && !saved.id.startsWith('local_')) {
         try {
           await patientsApi.uploadPhoto(saved.id, photo);
         } catch {
@@ -99,7 +102,7 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
       await select(saved.id);
       navigation.navigate('PatientDashboard');
     } catch (e) {
-      Alert.alert('Xəta', (e as Error).message);
+      Alert.alert(t('common.error'), (e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -108,11 +111,8 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
   const previewUri = photo?.uri ?? fileUrl(existing?.photoUrl);
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
-      <ScreenHeader
-        title={editId ? 'Pasiyenti redaktə et' : 'Yeni pasiyent'}
-        right={<Button label="Saxla" size="sm" loading={saving} onPress={onSave} />}
-      />
+    <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
+      <ScreenHeader title={editId ? t('patient.editPatient') : t('patient.newPatient')} />
 
       <KeyboardScrollView className="flex-1 px-4 pt-3">
         <View className="mb-6 items-center self-center">
@@ -124,8 +124,8 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
               />
             ) : (
               <View
-                style={{ backgroundColor: tints.blue.bg }}
-                className="h-24 w-24 items-center justify-center rounded-full border-2 border-line">
+                style={{ backgroundColor: tints.blue.bg, borderColor: colors.border }}
+                className="h-24 w-24 items-center justify-center rounded-full border-2">
                 <Camera size={36} color={tints.blue.fg} />
               </View>
             )}
@@ -134,48 +134,48 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
           <View className="mt-3.5 flex-row items-center gap-3">
             <Pressable
               onPress={handleCamera}
-              className="flex-row items-center rounded-2xl bg-primary-soft px-4 py-2.5 active:opacity-80">
+              style={{ backgroundColor: colors.primarySoft }}
+              className="flex-row items-center rounded-2xl px-4 py-2.5 active:opacity-80">
               <Camera size={18} color={colors.primary} />
-              <Text className="ml-2 text-[14px] font-bold text-primary">Kamera ilə çək</Text>
+              <Text className="ml-2 text-[14px] font-bold text-primary">{t('patient.takePhoto')}</Text>
             </Pressable>
             <Pressable
               onPress={handleGallery}
-              className="flex-row items-center rounded-2xl border border-line bg-surface px-4 py-2.5 active:opacity-80 shadow-sm">
+              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              className="flex-row items-center rounded-2xl border px-4 py-2.5 active:opacity-80 shadow-sm">
               <ImageIcon size={18} color={colors.textMuted} />
-              <Text className="ml-2 text-[14px] font-bold text-ink">Qalereya</Text>
+              <Text style={{ color: colors.text }} className="ml-2 text-[14px] font-bold">{t('patient.gallery')}</Text>
             </Pressable>
           </View>
         </View>
 
         <Field
-          label="Ad *"
-          placeholder="Pasiyentin adını daxil edin"
+          label={t('patient.firstName')}
+          placeholder={t('patient.firstNamePlh')}
           value={firstName}
           onChangeText={setFirstName}
         />
         <Field
-          label="Soyad *"
-          placeholder="Pasiyentin soyadını daxil edin"
+          label={t('patient.lastName')}
+          placeholder={t('patient.lastNamePlh')}
           value={lastName}
           onChangeText={setLastName}
         />
-        <Field
-          label="Telefon *"
-          placeholder="+994 XX XXX XX XX"
-          keyboardType="phone-pad"
+        <PhoneField
+          label={t('patient.phone')}
           value={phone}
           onChangeText={setPhone}
         />
         <Field
-          label="Doğum ili"
-          placeholder="Məsələn: 1965"
+          label={t('patient.birthYear')}
+          placeholder={t('patient.birthYearPlh')}
           keyboardType="number-pad"
           value={birthYear}
           onChangeText={setBirthYear}
         />
         <Field
-          label="Qeyd"
-          placeholder="Əlavə məlumat, allergiyalar..."
+          label={t('patient.note')}
+          placeholder={t('patient.notePlh')}
           multiline
           value={note}
           onChangeText={setNote}
@@ -183,7 +183,7 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
 
         <View className="mt-2 mb-8">
           <Button
-            label="Yadda saxla"
+            label={t('common.save')}
             size="lg"
             loading={saving}
             onPress={onSave}

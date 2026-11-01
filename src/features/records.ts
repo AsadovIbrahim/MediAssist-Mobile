@@ -12,11 +12,14 @@ import {
   diagnosesApi,
   treatmentsApi,
   type RecordInput,
+  type RecordUpdateInput,
 } from '../api/services';
 import type { Complaint, Diagnosis, FileItem, LocalFile, Treatment } from '../api/types';
 import type { ChipOption } from '../components/ui';
+import type { TranslationKey } from '../context/LanguageContext';
 import type { TintName } from '../theme';
 import { isAudioFile, isImageFile } from '../utils/media';
+import { offlineStorage } from '../utils/offlineStorage';
 
 /**
  * Complaints, diagnoses and treatments share the same UI (list → form → detail).
@@ -40,8 +43,8 @@ export type UploadSource = 'gallery' | 'camera' | 'voice' | 'document';
 interface RecordApi {
   list: (patientId: string, filter?: string, search?: string) => Promise<RecordItem[]>;
   get: (id: string) => Promise<RecordItem>;
-  create: (dto: RecordInput<string>) => Promise<RecordItem>;
-  update: (id: string, dto: RecordInput<string>) => Promise<RecordItem>;
+  create: (dto: RecordInput<string>, files?: LocalFile[]) => Promise<RecordItem>;
+  update: (id: string, dto: RecordInput<string>, files?: LocalFile[]) => Promise<RecordItem>;
   remove: (id: string) => Promise<unknown>;
   upload: (id: string, file: LocalFile) => Promise<FileItem>;
   removeFile: (id: string, fileId: string) => Promise<unknown>;
@@ -96,6 +99,147 @@ const fromExamination = (d: Diagnosis): RecordItem => ({
 
 const ALL = 'All';
 
+async function cachedList(
+  patientId: string,
+  kind: RecordKind,
+  filter: string | undefined,
+  search: string | undefined,
+  fetcher: () => Promise<RecordItem[]>,
+): Promise<RecordItem[]> {
+  try {
+    const remote = await fetcher();
+    if (!filter && !search) {
+      await offlineStorage.saveRecords(patientId, kind, remote);
+    }
+    return remote;
+  } catch (e: any) {
+    if (e?.status === 0 || !e?.status) {
+      const cached = await offlineStorage.getRecords(patientId, kind);
+      if (cached) {
+        let list = cached;
+        if (search) {
+          const s = search.toLowerCase();
+          list = list.filter(
+            r =>
+              r.title.toLowerCase().includes(s) ||
+              (r.description && r.description.toLowerCase().includes(s)),
+          );
+        }
+        if (filter && filter !== ALL) {
+          list = list.filter(r => r.kind === filter);
+        }
+        return list;
+      }
+    }
+    throw e;
+  }
+}
+
+async function cachedCreate(
+  patientId: string,
+  kind: RecordKind,
+  dto: RecordInput<any>,
+  creator: () => Promise<RecordItem>,
+  files?: LocalFile[],
+): Promise<RecordItem> {
+  try {
+    const created = await creator();
+    const cached = (await offlineStorage.getRecords(patientId, kind)) || [];
+    await offlineStorage.saveRecords(patientId, kind, [created, ...cached]);
+    return created;
+  } catch (e: any) {
+    if (e?.status === 0 || !e?.status) {
+      const localFiles: FileItem[] = (files || []).map((f, idx) => ({
+        id: `local_file_${Date.now()}_${idx}`,
+        fileName: f.name,
+        filePath: f.uri,
+        fileSize: f.size || 0,
+        type: f.type.startsWith('image/')
+          ? 'Image'
+          : f.type.startsWith('audio/')
+          ? 'VoiceRecording'
+          : 'Document',
+      }));
+      const localItem: RecordItem = {
+        id: `local_${kind}_${Date.now()}`,
+        title: dto.title,
+        description: dto.description,
+        kind: dto.kind,
+        date: dto.date || new Date().toISOString(),
+        files: localFiles,
+      };
+      const cached = (await offlineStorage.getRecords(patientId, kind)) || [];
+      await offlineStorage.saveRecords(patientId, kind, [localItem, ...cached]);
+      await offlineStorage.enqueue({
+        type: 'create_record',
+        recordKind: kind,
+        patientId,
+        payload: dto,
+        files,
+      });
+      return localItem;
+    }
+    throw e;
+  }
+}
+
+async function cachedUpdate(
+  id: string,
+  kind: RecordKind,
+  dto: RecordUpdateInput<any>,
+  updater: () => Promise<RecordItem>,
+  files?: LocalFile[],
+): Promise<RecordItem> {
+  try {
+    return await updater();
+  } catch (e: any) {
+    if (e?.status === 0 || !e?.status) {
+      const localFiles: FileItem[] = (files || []).map((f, idx) => ({
+        id: `local_file_${Date.now()}_${idx}`,
+        fileName: f.name,
+        filePath: f.uri,
+        fileSize: f.size || 0,
+        type: f.type.startsWith('image/')
+          ? 'Image'
+          : f.type.startsWith('audio/')
+          ? 'VoiceRecording'
+          : 'Document',
+      }));
+      await offlineStorage.enqueue({
+        type: 'update_record',
+        recordKind: kind,
+        recordId: id,
+        payload: dto,
+        files,
+      });
+      return {
+        id,
+        title: dto.title,
+        description: dto.description,
+        kind: dto.kind,
+        date: dto.date || new Date().toISOString(),
+        files: localFiles,
+      };
+    }
+    throw e;
+  }
+}
+
+async function cachedGet(
+  id: string,
+  fetcher: () => Promise<RecordItem>,
+): Promise<RecordItem> {
+  try {
+    return await fetcher();
+  } catch (e: any) {
+    if (e?.status === 0 || !e?.status || id.startsWith('local_')) {
+      const cached = await offlineStorage.findRecord(id);
+      if (cached) return cached;
+    }
+    throw e;
+  }
+}
+
 export const RECORDS: Record<RecordKind, RecordConfig> = {
   complaint: {
     title: 'Şikayətlər',
@@ -122,17 +266,26 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
     sources: ['gallery', 'camera', 'voice'],
     emptyText: 'Hələ şikayət əlavə edilməyib.',
     api: {
-      list: async (p, f, s) => (await complaintsApi.list(p, f, s)).map(fromComplaint),
-      get: async id => fromComplaint(await complaintsApi.get(id)),
-      create: async dto =>
-        fromComplaint(await complaintsApi.create(dto as RecordInput<Complaint['type']>)),
-      update: async (id, dto) =>
-        fromComplaint(
-          await complaintsApi.update(id, {
-            title: dto.title,
-            description: dto.description,
-            kind: dto.kind as Complaint['type'],
-          }),
+      list: (p, f, s) =>
+        cachedList(p, 'complaint', f, s, async () =>
+          (await complaintsApi.list(p, f, s)).map(fromComplaint),
+        ),
+      get: async id => cachedGet(id, async () => fromComplaint(await complaintsApi.get(id))),
+      create: (dto, files) =>
+        cachedCreate(dto.patientId, 'complaint', dto, async () =>
+          fromComplaint(await complaintsApi.create(dto as RecordInput<Complaint['type']>)),
+          files,
+        ),
+      update: (id, dto, files) =>
+        cachedUpdate(id, 'complaint', dto, async () =>
+          fromComplaint(
+            await complaintsApi.update(id, {
+              title: dto.title,
+              description: dto.description,
+              kind: dto.kind as Complaint['type'],
+            }),
+          ),
+          files,
         ),
       remove: complaintsApi.remove,
       upload: complaintsApi.upload,
@@ -164,33 +317,49 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
     sources: ['gallery', 'camera', 'document'],
     emptyText: 'Hələ müayinə və ya analiz sənədi əlavə edilməyib.',
     api: {
-      list: async (p, _f, s) => {
-        const all = await diagnosesApi.list(p, undefined, s);
-        return all
-          .filter(d => d.description?.startsWith('[Müayinə]'))
-          .map(fromExamination);
-      },
-      get: async id => fromExamination(await diagnosesApi.get(id)),
-      create: async dto => {
+      list: (p, _f, s) =>
+        cachedList(p, 'examination', undefined, s, async () => {
+          const all = await diagnosesApi.list(p, undefined, s);
+          return all
+            .filter(d => d.description?.startsWith('[Müayinə]'))
+            .map(fromExamination);
+        }),
+      get: async id => cachedGet(id, async () => fromExamination(await diagnosesApi.get(id))),
+      create: (dto, files) => {
         const desc = dto.description ? `[Müayinə]\n${dto.description}` : '[Müayinə]';
-        const created = await diagnosesApi.create({
-          patientId: dto.patientId,
-          title: dto.title,
-          description: desc,
-          kind: (dto.kind as Diagnosis['category']) || 'Document',
-          date: dto.date,
-        });
-        return fromExamination(created);
+        return cachedCreate(
+          dto.patientId,
+          'examination',
+          dto,
+          async () => {
+            const created = await diagnosesApi.create({
+              patientId: dto.patientId,
+              title: dto.title,
+              description: desc,
+              kind: (dto.kind as Diagnosis['category']) || 'Document',
+              date: dto.date,
+            });
+            return fromExamination(created);
+          },
+          files,
+        );
       },
-      update: async (id, dto) => {
+      update: (id, dto, files) => {
         const desc = dto.description ? `[Müayinə]\n${dto.description}` : '[Müayinə]';
-        return fromExamination(
-          await diagnosesApi.update(id, {
-            title: dto.title,
-            description: desc,
-            kind: (dto.kind as Diagnosis['category']) || 'Document',
-            date: dto.date,
-          }),
+        return cachedUpdate(
+          id,
+          'examination',
+          dto,
+          async () =>
+            fromExamination(
+              await diagnosesApi.update(id, {
+                title: dto.title,
+                description: desc,
+                kind: (dto.kind as Diagnosis['category']) || 'Document',
+                date: dto.date,
+              }),
+            ),
+          files,
         );
       },
       remove: diagnosesApi.remove,
@@ -223,23 +392,30 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
     sources: ['gallery', 'camera', 'document'],
     emptyText: 'Hələ diaqnoz sənədi əlavə edilməyib.',
     api: {
-      list: async (p, f, s) => {
-        const all = await diagnosesApi.list(p, f, s);
-        return all
-          .filter(d => !d.description?.startsWith('[Müayinə]'))
-          .map(fromDoc);
-      },
-      get: async id => fromDoc(await diagnosesApi.get(id)),
-      create: async dto =>
-        fromDoc(await diagnosesApi.create(dto as RecordInput<Diagnosis['category']>)),
-      update: async (id, dto) =>
-        fromDoc(
-          await diagnosesApi.update(id, {
-            title: dto.title,
-            description: dto.description,
-            kind: (dto.kind as Diagnosis['category']) || 'Document',
-            date: dto.date,
-          }),
+      list: (p, f, s) =>
+        cachedList(p, 'diagnosis', f, s, async () => {
+          const all = await diagnosesApi.list(p, f, s);
+          return all
+            .filter(d => !d.description?.startsWith('[Müayinə]'))
+            .map(fromDoc);
+        }),
+      get: async id => cachedGet(id, async () => fromDoc(await diagnosesApi.get(id))),
+      create: (dto, files) =>
+        cachedCreate(dto.patientId, 'diagnosis', dto, async () =>
+          fromDoc(await diagnosesApi.create(dto as RecordInput<Diagnosis['category']>)),
+          files,
+        ),
+      update: (id, dto, files) =>
+        cachedUpdate(id, 'diagnosis', dto, async () =>
+          fromDoc(
+            await diagnosesApi.update(id, {
+              title: dto.title,
+              description: dto.description,
+              kind: (dto.kind as Diagnosis['category']) || 'Document',
+              date: dto.date,
+            }),
+          ),
+          files,
         ),
       remove: diagnosesApi.remove,
       upload: diagnosesApi.upload,
@@ -271,18 +447,27 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
     sources: ['gallery', 'camera', 'document'],
     emptyText: 'Hələ müalicə planı və ya resept əlavə edilməyib.',
     api: {
-      list: async (p, f, s) => (await treatmentsApi.list(p, f, s)).map(fromDoc),
-      get: async id => fromDoc(await treatmentsApi.get(id)),
-      create: async dto =>
-        fromDoc(await treatmentsApi.create(dto as RecordInput<Treatment['category']>)),
-      update: async (id, dto) =>
-        fromDoc(
-          await treatmentsApi.update(id, {
-            title: dto.title,
-            description: dto.description,
-            kind: (dto.kind as Treatment['category']) || 'Prescription',
-            date: dto.date,
-          }),
+      list: (p, f, s) =>
+        cachedList(p, 'treatment', f, s, async () =>
+          (await treatmentsApi.list(p, f, s)).map(fromDoc),
+        ),
+      get: async id => cachedGet(id, async () => fromDoc(await treatmentsApi.get(id))),
+      create: (dto, files) =>
+        cachedCreate(dto.patientId, 'treatment', dto, async () =>
+          fromDoc(await treatmentsApi.create(dto as RecordInput<Treatment['category']>)),
+          files,
+        ),
+      update: (id, dto, files) =>
+        cachedUpdate(id, 'treatment', dto, async () =>
+          fromDoc(
+            await treatmentsApi.update(id, {
+              title: dto.title,
+              description: dto.description,
+              kind: (dto.kind as Treatment['category']) || 'Prescription',
+              date: dto.date,
+            }),
+          ),
+          files,
         ),
       remove: treatmentsApi.remove,
       upload: treatmentsApi.upload,
@@ -292,6 +477,111 @@ export const RECORDS: Record<RecordKind, RecordConfig> = {
 };
 
 export const ALL_FILTER = ALL;
+
+export function getRecordConfig(kind: RecordKind, t?: (k: TranslationKey) => string): RecordConfig {
+  const base = RECORDS[kind];
+  if (!t) {
+    return base;
+  }
+
+  if (kind === 'complaint') {
+    return {
+      ...base,
+      title: t('record.complaints'),
+      singular: t('record.complaint'),
+      newTitle: t('record.newComplaint'),
+      editTitle: t('record.editComplaint'),
+      searchPlaceholder: t('record.searchComplaint'),
+      descriptionLabel: t('record.descComplaint'),
+      descriptionPlaceholder: t('record.descComplaintPlh'),
+      filters: [
+        { value: ALL, label: t('record.filterAll') },
+        { value: 'Text', label: t('record.filterText') },
+        { value: 'Image', label: t('record.filterImage') },
+        { value: 'Voice', label: t('record.filterVoice') },
+      ],
+      kinds: [
+        { value: 'Text', label: t('record.filterText') },
+        { value: 'Image', label: t('record.filterImage') },
+        { value: 'Voice', label: t('record.filterVoice') },
+      ],
+      emptyText: t('record.emptyComplaint'),
+    };
+  }
+
+  if (kind === 'examination') {
+    return {
+      ...base,
+      title: t('record.examinations'),
+      singular: t('record.examination'),
+      newTitle: t('record.newExamination'),
+      editTitle: t('record.editExamination'),
+      searchPlaceholder: t('record.searchExamination'),
+      descriptionLabel: t('record.descExamination'),
+      descriptionPlaceholder: t('record.descExaminationPlh'),
+      filters: [
+        { value: ALL, label: t('record.filterAll') },
+        { value: 'Document', label: t('record.filterDocuments') },
+        { value: 'Image', label: t('record.filterImages') },
+        { value: 'Note', label: t('record.filterNotes') },
+      ],
+      kinds: [
+        { value: 'Document', label: t('record.filterDocument') },
+        { value: 'Image', label: t('record.filterImage') },
+        { value: 'Note', label: t('record.filterNote') },
+      ],
+      emptyText: t('record.emptyExamination'),
+    };
+  }
+
+  if (kind === 'diagnosis') {
+    return {
+      ...base,
+      title: t('record.diagnoses'),
+      singular: t('record.diagnosis'),
+      newTitle: t('record.newDiagnosis'),
+      editTitle: t('record.editDiagnosis'),
+      searchPlaceholder: t('record.searchDiagnosis'),
+      descriptionLabel: t('record.descDiagnosis'),
+      descriptionPlaceholder: t('record.descDiagnosisPlh'),
+      filters: [
+        { value: ALL, label: t('record.filterAll') },
+        { value: 'Document', label: t('record.filterDocuments') },
+        { value: 'Image', label: t('record.filterImages') },
+        { value: 'Note', label: t('record.filterNotes') },
+      ],
+      kinds: [
+        { value: 'Document', label: t('record.filterDocument') },
+        { value: 'Image', label: t('record.filterImage') },
+        { value: 'Note', label: t('record.filterNote') },
+      ],
+      emptyText: t('record.emptyDiagnosis'),
+    };
+  }
+
+  return {
+    ...base,
+    title: t('record.treatments'),
+    singular: t('record.treatment'),
+    newTitle: t('record.newTreatment'),
+    editTitle: t('record.editTreatment'),
+    searchPlaceholder: t('record.searchTreatment'),
+    descriptionLabel: t('record.descTreatment'),
+    descriptionPlaceholder: t('record.descTreatmentPlh'),
+    filters: [
+      { value: ALL, label: t('record.filterAll') },
+      { value: 'Prescription', label: t('record.filterPrescriptions') },
+      { value: 'Plan', label: t('record.filterPlans') },
+      { value: 'Note', label: t('record.filterNotes') },
+    ],
+    kinds: [
+      { value: 'Prescription', label: t('record.filterPrescription') },
+      { value: 'Plan', label: t('record.filterPlan') },
+      { value: 'Note', label: t('record.filterNote') },
+    ],
+    emptyText: t('record.emptyTreatment'),
+  };
+}
 
 export function splitFiles(files: FileItem[]) {
   const images = files.filter(f => isImageFile(f));
@@ -335,5 +625,98 @@ export function recordVisual(kind: RecordKind, item: RecordItem): { icon: Lucide
     return { icon: FileText, tint: 'blue' };
   }
   return { icon: FileText, tint: 'green' };
+}
+
+const FILE_SUFFIX_REGEX = /\((?:Fayllı|With files|С файлами)\)$/i;
+const VOICE_SUFFIX_REGEX = /\((?:Səs qeydi|Voice note|Голосовая запись)\)$/i;
+const RECORD_SUFFIX_REGEX = /\b(?:qeydi|record|запись)$/i;
+
+function detectKind(text: string, fallback?: RecordKind): RecordKind {
+  const low = text.toLowerCase();
+  if (low.includes('müayinə') || low.includes('examination') || low.includes('обследование')) {
+    return 'examination';
+  }
+  if (low.includes('diaqnoz') || low.includes('diagnosis') || low.includes('диагноз')) {
+    return 'diagnosis';
+  }
+  if (low.includes('şikayət') || low.includes('complaint') || low.includes('жалоб')) {
+    return 'complaint';
+  }
+  if (low.includes('müalicə') || low.includes('treatment') || low.includes('лечени')) {
+    return 'treatment';
+  }
+  return fallback ?? 'complaint';
+}
+
+export function localizeRecordTitle(
+  title: string,
+  kind?: RecordKind,
+  t?: (k: TranslationKey) => string,
+): string {
+  if (!t || !title) {
+    return title;
+  }
+  const trimmed = title.trim();
+
+  if (FILE_SUFFIX_REGEX.test(trimmed)) {
+    const k = detectKind(trimmed, kind);
+    return `${getRecordConfig(k, t).singular} ${t('record.fileSuffix')}`;
+  }
+
+  if (VOICE_SUFFIX_REGEX.test(trimmed)) {
+    const k = detectKind(trimmed, kind);
+    return `${getRecordConfig(k, t).singular} ${t('record.voiceSuffix')}`;
+  }
+
+  if (RECORD_SUFFIX_REGEX.test(trimmed)) {
+    const k = detectKind(trimmed, kind);
+    return `${getRecordConfig(k, t).singular} ${t('record.recordSuffix')}`;
+  }
+
+  const rawLow = trimmed.toLowerCase();
+  if (
+    rawLow === 'müayinə' ||
+    rawLow === 'diaqnoz' ||
+    rawLow === 'şikayət' ||
+    rawLow === 'müalicə' ||
+    rawLow === 'examination' ||
+    rawLow === 'diagnosis' ||
+    rawLow === 'complaint' ||
+    rawLow === 'treatment' ||
+    rawLow === 'обследование' ||
+    rawLow === 'диагноз' ||
+    rawLow === 'жалоба' ||
+    rawLow === 'лечение'
+  ) {
+    const exactKind = detectKind(trimmed, kind);
+    return getRecordConfig(exactKind, t).singular;
+  }
+
+  return title;
+}
+
+export function localizeAppointmentTitle(
+  title: string,
+  t?: (k: TranslationKey) => string,
+): string {
+  if (!t || !title) {
+    return title;
+  }
+  const low = title.trim().toLowerCase();
+  if (low === 'həkim müayinəsi' || low === 'doctor visit' || low === 'прием врача') {
+    return t('appointment.doctorVisit');
+  }
+  if (
+    low === 'qan analizi' ||
+    low === 'lab test' ||
+    low === 'анализ / лаборатория' ||
+    low === 'анализ крови'
+  ) {
+    return t('appointment.labTest');
+  }
+  if (low === 'digər' || low === 'other' || low === 'другое') {
+    return t('appointment.other');
+  }
+  return title;
 }
 

@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { colors } from '../theme';
-import { MONTHS, WEEKDAYS, dayKey, isSameDay } from '../utils/format';
+import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
+import { getMonthNames, getWeekdays, dayKey, isSameDay } from '../utils/format';
 
 interface Props {
   /** Any date within the displayed month */
@@ -40,6 +41,10 @@ export function MonthCalendar({ month, selected, onSelect, onMonthChange, marker
 
   const shift = (n: number) => onMonthChange(new Date(month.getFullYear(), month.getMonth() + n, 1));
   const today = new Date();
+  const { language } = useLanguage();
+  const { colors } = useTheme();
+  const monthNames = getMonthNames(language);
+  const weekdays = getWeekdays(language);
 
   return (
     <View className="px-3">
@@ -47,23 +52,25 @@ export function MonthCalendar({ month, selected, onSelect, onMonthChange, marker
         <Pressable
           onPress={() => shift(-1)}
           hitSlop={14}
-          className="h-10 w-10 items-center justify-center rounded-xl bg-field active:bg-line">
+          style={{ backgroundColor: colors.field }}
+          className="h-10 w-10 items-center justify-center rounded-xl active:opacity-75">
           <ChevronLeft size={22} color={colors.text} />
         </Pressable>
-        <Text className="text-[18px] font-bold text-ink">
-          {MONTHS[month.getMonth()]} {month.getFullYear()}
+        <Text style={{ color: colors.text }} className="text-[18px] font-bold">
+          {monthNames[month.getMonth()]} {month.getFullYear()}
         </Text>
         <Pressable
           onPress={() => shift(1)}
           hitSlop={14}
-          className="h-10 w-10 items-center justify-center rounded-xl bg-field active:bg-line">
+          style={{ backgroundColor: colors.field }}
+          className="h-10 w-10 items-center justify-center rounded-xl active:opacity-75">
           <ChevronRight size={22} color={colors.text} />
         </Pressable>
       </View>
 
       <View className="mb-2 flex-row">
-        {WEEKDAYS.map(w => (
-          <Text key={w} className="flex-1 text-center text-[13px] font-bold text-ink-muted">
+        {weekdays.map((w, index) => (
+          <Text key={`${w}-${index}`} style={{ color: colors.textMuted }} className="flex-1 text-center text-[13px] font-bold">
             {w}
           </Text>
         ))}
@@ -76,24 +83,26 @@ export function MonthCalendar({ month, selected, onSelect, onMonthChange, marker
             const isSelected = isSameDay(d, selected);
             const isToday = isSameDay(d, today);
             const marker = markers[dayKey(d)];
+            const dateTextColor = isSelected
+              ? '#ffffff'
+              : !inMonth
+                ? colors.textLight + '80'
+                : isToday
+                  ? colors.primary
+                  : colors.text;
+
             return (
               <Pressable
                 key={d.toISOString()}
                 onPress={() => onSelect(d)}
                 className="h-12 flex-1 items-center justify-center">
                 <View
-                  className={`h-9 w-9 items-center justify-center rounded-full ${
-                    isSelected ? 'bg-primary' : ''
-                  }`}>
+                  style={isSelected ? { backgroundColor: colors.primary } : undefined}
+                  className="h-9 w-9 items-center justify-center rounded-full">
                   <Text
+                    style={{ color: dateTextColor }}
                     className={`text-[16px] ${
-                      isSelected
-                        ? 'font-bold text-white'
-                        : !inMonth
-                          ? 'text-ink-light/50 font-normal'
-                          : isToday
-                            ? 'font-bold text-primary'
-                            : 'font-semibold text-ink'
+                      isSelected || isToday ? 'font-bold' : inMonth ? 'font-semibold' : 'font-normal'
                     }`}>
                     {d.getDate()}
                   </Text>

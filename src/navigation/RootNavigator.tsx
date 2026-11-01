@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useMemo, useState } from 'react';
+import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FileText, Home, Search, User } from 'lucide-react-native';
 import { AnimatedSplash } from '../components/AnimatedSplash';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { AiScreen } from '../screens/AiScreen';
 import { AppointmentFormScreen } from '../screens/AppointmentFormScreen';
 import {
@@ -27,7 +29,6 @@ import { RecordDetailScreen } from '../screens/RecordDetailScreen';
 import { RecordFormScreen } from '../screens/RecordFormScreen';
 import { RecordListScreen } from '../screens/RecordListScreen';
 import { SearchScreen } from '../screens/SearchScreen';
-import { colors } from '../theme';
 import type { RootStackParamList, TabParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,6 +37,8 @@ const Tab = createBottomTabNavigator<TabParamList>();
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, 12);
+  const { t } = useLanguage();
+  const { colors } = useTheme();
 
   return (
     <Tab.Navigator
@@ -63,7 +66,7 @@ function MainTabs() {
         name="Home"
         component={HomeScreen}
         options={{
-          title: 'Ana səhifə',
+          title: t('tab.home'),
           tabBarIcon: ({ color }) => <Home size={25} color={color} strokeWidth={2.2} />,
         }}
       />
@@ -71,7 +74,7 @@ function MainTabs() {
         name="Documents"
         component={DocumentsScreen}
         options={{
-          title: 'Sənədlər',
+          title: t('tab.documents'),
           tabBarIcon: ({ color }) => <FileText size={25} color={color} strokeWidth={2.2} />,
         }}
       />
@@ -79,7 +82,7 @@ function MainTabs() {
         name="Search"
         component={SearchScreen}
         options={{
-          title: 'Axtarış',
+          title: t('tab.search'),
           tabBarIcon: ({ color }) => <Search size={25} color={color} strokeWidth={2.2} />,
         }}
       />
@@ -87,7 +90,7 @@ function MainTabs() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          title: 'Profil',
+          title: t('tab.profile'),
           tabBarIcon: ({ color }) => <User size={25} color={color} strokeWidth={2.2} />,
         }}
       />
@@ -97,14 +100,30 @@ function MainTabs() {
 
 export function RootNavigator() {
   const { ready, user } = useAuth();
+  const { isDark, colors } = useTheme();
   const [splashDone, setSplashDone] = useState(false);
+
+  const navigationTheme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        background: colors.background,
+        card: colors.surface,
+        text: colors.text,
+        border: colors.border,
+        primary: colors.primary,
+      },
+    };
+  }, [isDark, colors]);
 
   if (!splashDone || !ready) {
     return <AnimatedSplash ready={ready} onFinish={() => setSplashDone(true)} />;
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
         {!user ? (
           <>
@@ -133,4 +152,3 @@ export function RootNavigator() {
     </NavigationContainer>
   );
 }
-

@@ -21,7 +21,8 @@ import {
 } from 'lucide-react-native';
 import { fileUrl } from '../api/client';
 import type { FileItem, LocalFile } from '../api/types';
-import { colors, tints } from '../theme';
+import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   AudioEncoderAndroidType,
   AudioSourceAndroidType,
@@ -57,6 +58,7 @@ import { docLabel, requestMicPermission } from '../utils/media';
 /* ------------------------------------------------------------------ */
 
 export function FileBadge({ file }: { file: FileItem }) {
+  const { colors, tints } = useTheme();
   const label = docLabel(file);
   const color = label === 'PDF' ? tints.red.fg : tints.blue.fg;
   return (
@@ -69,7 +71,7 @@ export function FileBadge({ file }: { file: FileItem }) {
         className="mr-1.5 h-5 w-5 items-center justify-center rounded">
         <FileText size={12} color={color} strokeWidth={2.4} />
       </View>
-      <Text className="text-xs text-ink-muted">
+      <Text style={{ color: colors.textMuted }} className="text-xs">
         {label}
         {file.fileSize ? ` • ${formatSize(file.fileSize)}` : ''}
       </Text>
@@ -99,6 +101,7 @@ export function ImageStrip({
   size?: number;
   wideSingle?: boolean;
 }) {
+  const { colors } = useTheme();
   const [viewer, setViewer] = useState<number | null>(null);
   if (!files.length) {
     return null;
@@ -152,6 +155,7 @@ export function ImageViewer({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [current, setCurrent] = useState(index ?? 0);
   useEffect(() => {
     if (index !== null) {
@@ -172,11 +176,21 @@ export function ImageViewer({
         <Pressable
           onPress={onClose}
           hitSlop={12}
-          style={{ top: Math.max(insets.top, 16) + 6 }}
+          style={{
+            top: Math.max(insets.top, 16) + 6,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            borderColor: 'rgba(255, 255, 255, 0.3)',
+            borderWidth: 1,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.4,
+            shadowRadius: 4,
+            elevation: 6,
+          }}
           accessibilityRole="button"
-          accessibilityLabel="Bağla"
-          className="absolute right-4 z-20 h-12 w-12 items-center justify-center rounded-full bg-white/25 active:bg-white/40">
-          <X size={26} color="#fff" strokeWidth={2.5} />
+          accessibilityLabel={t('common.close')}
+          className="absolute right-4 z-20 h-11 w-11 items-center justify-center rounded-full active:opacity-75">
+          <X size={22} color="#ffffff" strokeWidth={2.6} />
         </Pressable>
 
         {/* Center image view */}
@@ -197,8 +211,13 @@ export function ImageViewer({
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="Əvvəlki şəkil"
-            className="absolute left-3 top-1/2 z-20 -mt-6 h-12 w-12 items-center justify-center rounded-full bg-white/25 active:bg-white/40">
-            <ChevronLeft size={28} color="#fff" strokeWidth={2.5} />
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              borderColor: 'rgba(255, 255, 255, 0.25)',
+              borderWidth: 1,
+            }}
+            className="absolute left-3 top-1/2 z-20 -mt-6 h-12 w-12 items-center justify-center rounded-full active:opacity-75">
+            <ChevronLeft size={28} color="#ffffff" strokeWidth={2.5} />
           </Pressable>
         )}
 
@@ -209,8 +228,13 @@ export function ImageViewer({
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="Növbəti şəkil"
-            className="absolute right-3 top-1/2 z-20 -mt-6 h-12 w-12 items-center justify-center rounded-full bg-white/25 active:bg-white/40">
-            <ChevronRight size={28} color="#fff" strokeWidth={2.5} />
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              borderColor: 'rgba(255, 255, 255, 0.25)',
+              borderWidth: 1,
+            }}
+            className="absolute right-3 top-1/2 z-20 -mt-6 h-12 w-12 items-center justify-center rounded-full active:opacity-75">
+            <ChevronRight size={28} color="#ffffff" strokeWidth={2.5} />
           </Pressable>
         )}
 
@@ -247,6 +271,7 @@ function bars(seed: string) {
 }
 
 export function Waveform({ seed, progress }: { seed: string; progress: number }) {
+  const { colors, isDark } = useTheme();
   const data = useMemo(() => bars(seed), [seed]);
   return (
     <View className="mx-2.5 h-6 flex-1 flex-row items-center justify-between">
@@ -257,7 +282,7 @@ export function Waveform({ seed, progress }: { seed: string; progress: number })
             width: 2.5,
             height: `${Math.round(v * 100)}%`,
             borderRadius: 2,
-            backgroundColor: i / BAR_COUNT < progress ? colors.primary : '#B9C3D3',
+            backgroundColor: i / BAR_COUNT < progress ? colors.primary : isDark ? '#475569' : '#B9C3D3',
           }}
         />
       ))}
@@ -287,9 +312,10 @@ export function VoicePlayer({
       Alert.alert('Xəta', `Səs faylı oxunmadı: ${(e as Error).message}`);
     }
   };
+  const { colors } = useTheme();
   const label = playing || position ? formatDuration(position) : total ? formatDuration(total) : fallbackLabel ?? '0:00';
   return (
-    <View className="mt-2 flex-row items-center rounded-xl bg-field px-2 py-2">
+    <View style={{ backgroundColor: colors.field }} className="mt-2 flex-row items-center rounded-xl px-2 py-2">
       <Pressable
         onPress={onPress}
         hitSlop={8}
@@ -301,7 +327,7 @@ export function VoicePlayer({
         )}
       </Pressable>
       <Waveform seed={uri ?? 'voice'} progress={progress} />
-      <Text className="mr-1 min-w-[34px] text-right text-xs font-medium text-ink-muted">{label}</Text>
+      <Text style={{ color: colors.textMuted }} className="mr-1 min-w-[34px] text-right text-xs font-medium">{label}</Text>
     </View>
   );
 }
@@ -319,9 +345,12 @@ export function LocalFileRow({
   onRemove: () => void;
   last?: boolean;
 }) {
+  const { colors, tints } = useTheme();
   const { playing } = useAudio(file.kind === 'audio' ? file.uri : undefined);
   return (
-    <View className={`flex-row items-center py-3 ${last ? '' : 'border-b border-line'}`}>
+    <View
+      style={last ? undefined : { borderBottomColor: colors.border, borderBottomWidth: 1 }}
+      className="flex-row items-center py-3">
       {file.kind === 'image' ? (
         <Image source={{ uri: file.uri }} style={{ width: 44, height: 44, borderRadius: 10 }} />
       ) : file.kind === 'audio' ? (
@@ -345,10 +374,10 @@ export function LocalFileRow({
         </View>
       )}
       <View className="ml-3 flex-1">
-        <Text className="text-sm font-medium text-ink" numberOfLines={1}>
+        <Text style={{ color: colors.text }} className="text-sm font-medium" numberOfLines={1}>
           {file.name}
         </Text>
-        <Text className="mt-0.5 text-xs text-ink-muted">
+        <Text style={{ color: colors.textMuted }} className="mt-0.5 text-xs">
           {file.kind === 'audio' ? formatDuration(file.durationMs) : formatSize(file.size)}
         </Text>
       </View>
@@ -373,6 +402,8 @@ export function RecorderModal({
   onRecorded: (file: LocalFile) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
+  const { colors, tints } = useTheme();
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const elapsedRef = useRef(0);
@@ -399,7 +430,7 @@ export function RecorderModal({
       setRecording(true);
     } catch (e) {
       Sound.removeRecordBackListener();
-      Alert.alert('Xəta', `Səs yazılması başlamadı: ${(e as Error).message}`);
+      Alert.alert(t('common.error'), `Səs yazılması başlamadı: ${(e as Error).message}`);
     }
   };
 
@@ -420,7 +451,7 @@ export function RecorderModal({
       });
       onClose();
     } catch (e) {
-      Alert.alert('Xəta', (e as Error).message);
+      Alert.alert(t('common.error'), (e as Error).message);
     }
   };
 
@@ -440,18 +471,21 @@ export function RecorderModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={cancel}>
       <Pressable className="flex-1 bg-black/40" onPress={cancel} />
       <View
-        style={{ paddingBottom: Math.max(insets.bottom, 16) + 20 }}
-        className="items-center rounded-t-3xl bg-surface px-6 pt-6">
-        <View className="mb-6 h-1 w-10 rounded-full bg-line" />
-        <Text className="text-base font-semibold text-ink">Səs qeydi</Text>
-        <Text className="mt-6 text-4xl font-light text-ink">{formatDuration(elapsed)}</Text>
-        <Text className="mt-1 text-sm text-ink-muted">
-          {recording ? 'Yazılır...' : 'Başlamaq üçün düyməyə toxunun'}
+        style={{
+          paddingBottom: Math.max(insets.bottom, 16) + 20,
+          backgroundColor: colors.surface,
+        }}
+        className="items-center rounded-t-3xl px-6 pt-6">
+        <View style={{ backgroundColor: colors.border }} className="mb-6 h-1 w-10 rounded-full" />
+        <Text style={{ color: colors.text }} className="text-base font-semibold">{t('recorder.title')}</Text>
+        <Text style={{ color: colors.text }} className="mt-6 text-4xl font-light">{formatDuration(elapsed)}</Text>
+        <Text style={{ color: colors.textMuted }} className="mt-1 text-sm">
+          {recording ? t('recorder.recording') : t('recorder.tapToStart')}
         </Text>
         <Pressable
           onPress={recording ? stop : start}
           style={{ backgroundColor: recording ? colors.danger : tints.red.bg }}
-          className="mt-8 h-20 w-20 items-center justify-center rounded-full">
+          className="mt-8 h-20 w-20 items-center justify-center rounded-full active:opacity-80">
           {recording ? (
             <Square size={28} color="#fff" fill="#fff" />
           ) : (
@@ -459,7 +493,7 @@ export function RecorderModal({
           )}
         </Pressable>
         <Pressable onPress={cancel} className="mt-6">
-          <Text className="text-sm font-medium text-ink-muted">Ləğv et</Text>
+          <Text style={{ color: colors.textMuted }} className="text-sm font-medium">{t('common.cancel')}</Text>
         </Pressable>
       </View>
     </Modal>

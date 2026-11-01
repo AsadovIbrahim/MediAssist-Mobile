@@ -10,11 +10,15 @@ import {
   TextInput,
   View,
   type ScrollViewProps,
+  type StyleProp,
   type TextInputProps,
+  type ViewStyle,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Eye, EyeOff, Plus, Search, type LucideIcon } from 'lucide-react-native';
+import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { colors, tints, type TintName } from '../theme';
 
 /* ------------------------------------------------------------------ */
@@ -170,17 +174,19 @@ interface HeaderProps {
 
 export function ScreenHeader({ title, right, back = true }: HeaderProps) {
   const navigation = useNavigation();
+  const { colors } = useTheme();
   return (
     <View className="flex-row items-center px-4 pt-3 pb-3">
       {back && (
         <Pressable
           onPress={() => navigation.goBack()}
           hitSlop={14}
-          className="mr-3 h-11 w-11 items-center justify-center rounded-2xl border border-line bg-surface active:bg-field shadow-sm">
+          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          className="mr-3 h-11 w-11 items-center justify-center rounded-2xl border active:opacity-70 shadow-sm">
           <ChevronLeft size={24} color={colors.text} />
         </Pressable>
       )}
-      <Text className="flex-1 text-[21px] font-bold text-ink" numberOfLines={1}>
+      <Text style={{ color: colors.text }} className="flex-1 text-[21px] font-bold" numberOfLines={1}>
         {title}
       </Text>
       {right}
@@ -213,9 +219,10 @@ export function Button({
   size = 'md',
   className = '',
 }: ButtonProps) {
+  const { colors, isDark } = useTheme();
   const palette = {
     primary: { bg: colors.primary, fg: '#fff' },
-    soft: { bg: colors.primarySoft, fg: colors.primary },
+    soft: { bg: isDark ? '#1E3A8A' : colors.primarySoft, fg: isDark ? '#93C5FD' : colors.primary },
     danger: { bg: colors.dangerSoft, fg: colors.danger },
     ghost: { bg: 'transparent', fg: colors.primary },
   }[variant];
@@ -249,8 +256,9 @@ export function Button({
   );
 }
 
-export function AddButton({ onPress, label = 'Əlavə et' }: { onPress: () => void; label?: string }) {
-  return <Button label={label} icon={Plus} onPress={onPress} size="sm" />;
+export function AddButton({ onPress, label }: { onPress: () => void; label?: string }) {
+  const { t } = useLanguage();
+  return <Button label={label ?? t('common.add')} icon={Plus} onPress={onPress} size="sm" />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -258,13 +266,17 @@ export function AddButton({ onPress, label = 'Əlavə et' }: { onPress: () => vo
 /* ------------------------------------------------------------------ */
 
 export function SearchBar(props: TextInputProps) {
+  const { colors } = useTheme();
   return (
-    <View className="mx-4 mb-3 flex-row items-center rounded-2xl border border-line bg-field px-3.5 py-1">
+    <View
+      style={{ backgroundColor: colors.field, borderColor: colors.border }}
+      className="mx-4 mb-3 flex-row items-center rounded-2xl border px-3.5 py-1">
       <Search size={22} color={colors.textMuted} />
       <TextInput
         placeholderTextColor={colors.textLight}
         returnKeyType="search"
-        className="ml-2.5 flex-1 py-3 text-[16px] font-medium text-ink"
+        style={{ color: colors.text }}
+        className="ml-2.5 flex-1 py-3 text-[16px] font-medium"
         {...props}
       />
     </View>
@@ -287,25 +299,33 @@ export function Field({
   secureTextEntry,
   ...rest
 }: FieldProps) {
+  const { colors } = useTheme();
   const wrapRef = useRef<ViewNode>(null);
   const ensureVisible = useContext(ScrollEnsureContext);
   const [passwordVisible, setPasswordVisible] = useState(false);
 
   return (
     <View ref={wrapRef} collapsable={false} className="mb-5">
-      {label && <Text className="mb-2 text-[16px] font-bold text-ink">{label}</Text>}
+      {label && (
+        <Text style={{ color: colors.text }} className="mb-2 text-[16px] font-bold">
+          {label}
+        </Text>
+      )}
       {secureTextEntry ? (
         <View
-          className={`flex-row items-center rounded-2xl border bg-surface px-4 ${
-            error ? 'border-danger' : 'border-line'
-          }`}>
+          style={{
+            backgroundColor: colors.surface,
+            borderColor: error ? colors.danger : colors.border,
+          }}
+          className="flex-row items-center rounded-2xl border px-4">
           <TextInput
             value={value}
             secureTextEntry={!passwordVisible}
             placeholderTextColor={colors.textLight}
             autoCapitalize="none"
             autoCorrect={false}
-            className="flex-1 py-3.5 text-[16px] text-ink"
+            style={{ color: colors.text }}
+            className="flex-1 py-3.5 text-[16px]"
             maxLength={counter}
             onFocus={e => {
               ensureVisible?.(wrapRef.current);
@@ -330,10 +350,15 @@ export function Field({
           multiline={multiline}
           placeholderTextColor={colors.textLight}
           textAlignVertical={multiline ? 'top' : 'center'}
-          style={multiline ? { minHeight: 130 } : undefined}
-          className={`rounded-2xl border bg-surface px-4 py-3.5 text-[16px] text-ink leading-6 ${
-            error ? 'border-danger' : 'border-line'
-          }`}
+          style={[
+            multiline ? { minHeight: 130 } : undefined,
+            {
+              backgroundColor: colors.surface,
+              borderColor: error ? colors.danger : colors.border,
+              color: colors.text,
+            },
+          ]}
+          className="rounded-2xl border px-4 py-3.5 text-[16px] leading-6"
           maxLength={counter}
           onFocus={e => {
             ensureVisible?.(wrapRef.current);
@@ -343,10 +368,116 @@ export function Field({
         />
       )}
       {counter !== undefined && (
-        <Text className="mt-1 self-end text-xs font-semibold text-ink-muted">
+        <Text style={{ color: colors.textMuted }} className="mt-1 self-end text-xs font-semibold">
           {value?.length ?? 0}/{counter}
         </Text>
       )}
+      {error && <Text className="mt-1.5 text-sm font-semibold text-danger">{error}</Text>}
+    </View>
+  );
+}
+
+export function extractAzerbaijanDigits(raw: string): string {
+  let d = (raw || '').replace(/\D/g, '');
+  if (d.startsWith('994')) {
+    d = d.slice(3);
+  }
+  if (d.startsWith('0')) {
+    d = d.slice(1);
+  }
+  return d.slice(0, 9);
+}
+
+export function formatAzerbaijanDisplay(digitsOrRaw: string): string {
+  const d = extractAzerbaijanDigits(digitsOrRaw);
+  let res = '';
+  if (d.length > 0) {
+    res = `(${d.slice(0, Math.min(2, d.length))}`;
+    if (d.length >= 2) res += ') ';
+  }
+  if (d.length > 2) {
+    res += d.slice(2, Math.min(5, d.length));
+  }
+  if (d.length >= 5) {
+    res += `-${d.slice(5, Math.min(7, d.length))}`;
+  }
+  if (d.length >= 7) {
+    res += `-${d.slice(7, 9)}`;
+  }
+  return res;
+}
+
+export interface PhoneFieldProps {
+  label?: string;
+  value: string;
+  onChangeText: (normalizedPhone: string) => void;
+  error?: string;
+  placeholder?: string;
+}
+
+export function PhoneField({
+  label = 'Telefon *',
+  value,
+  onChangeText,
+  error,
+  placeholder = '(50) 000-00-00',
+}: PhoneFieldProps) {
+  const { colors } = useTheme();
+  const wrapRef = useRef<ViewNode>(null);
+  const ensureVisible = useContext(ScrollEnsureContext);
+
+  const display = formatAzerbaijanDisplay(value);
+
+  const handleChange = (text: string) => {
+    let d = text.replace(/\D/g, '');
+    if (d.startsWith('994')) d = d.slice(3);
+    if (d.startsWith('0')) d = d.slice(1);
+
+    const prevD = extractAzerbaijanDigits(value);
+    if (text.length < display.length && d === prevD && d.length > 0) {
+      d = d.slice(0, -1);
+    }
+
+    d = d.slice(0, 9);
+    onChangeText(d ? `+994${d}` : '');
+  };
+
+  return (
+    <View ref={wrapRef} collapsable={false} className="mb-5">
+      {label && (
+        <Text style={{ color: colors.text }} className="mb-2 text-[16px] font-bold">
+          {label}
+        </Text>
+      )}
+      <View
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: error ? colors.danger : colors.border,
+        }}
+        className="flex-row items-center rounded-2xl border px-3.5 py-1">
+        <View
+          className="flex-row items-center pr-3 border-r"
+          style={{ borderColor: colors.border }}>
+          <Text className="mr-1.5 text-[18px]">🇦🇿</Text>
+          <Text style={{ color: colors.text }} className="text-[16px] font-bold">
+            +994
+          </Text>
+        </View>
+
+        <TextInput
+          value={display}
+          onChangeText={handleChange}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textLight}
+          keyboardType="phone-pad"
+          style={{ color: colors.text }}
+          className="flex-1 py-3 pl-3 text-[16px] font-medium"
+          maxLength={15}
+          onFocus={e => {
+            ensureVisible?.(wrapRef.current);
+          }}
+        />
+      </View>
       {error && <Text className="mt-1.5 text-sm font-semibold text-danger">{error}</Text>}
     </View>
   );
@@ -370,6 +501,7 @@ export function FilterChips<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
+  const { colors } = useTheme();
   return (
     <ScrollView
       horizontal
@@ -384,8 +516,15 @@ export function FilterChips<T extends string>({
             key={o.value}
             onPress={() => onChange(o.value)}
             hitSlop={6}
-            className={`rounded-2xl px-5 py-2.5 ${active ? 'bg-primary' : 'bg-field border border-line'}`}>
-            <Text className={`text-[15px] ${active ? 'font-bold text-white' : 'font-semibold text-ink'}`}>
+            style={
+              active
+                ? { backgroundColor: colors.primary }
+                : { backgroundColor: colors.field, borderColor: colors.border }
+            }
+            className={`rounded-2xl px-5 py-2.5 ${active ? '' : 'border'}`}>
+            <Text
+              style={active ? { color: '#ffffff' } : { color: colors.text }}
+              className={`text-[15px] ${active ? 'font-bold' : 'font-semibold'}`}>
               {o.label}
             </Text>
           </Pressable>
@@ -404,6 +543,7 @@ export function Segmented<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
+  const { colors, isDark } = useTheme();
   return (
     <View className="mb-5 flex-row gap-2.5">
       {options.map(o => {
@@ -413,11 +553,18 @@ export function Segmented<T extends string>({
             key={o.value}
             onPress={() => onChange(o.value)}
             hitSlop={6}
-            className={`flex-1 items-center rounded-2xl py-3 border ${
-              active ? 'bg-primary-soft border-primary' : 'bg-field border-line'
-            }`}>
+            style={
+              active
+                ? {
+                    backgroundColor: isDark ? '#1E3A8A' : colors.primarySoft,
+                    borderColor: colors.primary,
+                  }
+                : { backgroundColor: colors.field, borderColor: colors.border }
+            }
+            className="flex-1 items-center rounded-2xl py-3 border">
             <Text
-              className={`text-[15px] ${active ? 'font-bold text-primary' : 'font-semibold text-ink-muted'}`}>
+              style={{ color: active ? colors.primary : colors.textMuted }}
+              className={`text-[15px] ${active ? 'font-bold' : 'font-semibold'}`}>
               {o.label}
             </Text>
           </Pressable>
@@ -445,6 +592,7 @@ export function IconTile({
   /** "tile" = darker tinted square (home cards), "soft" = light tinted square (lists) */
   variant?: 'tile' | 'soft';
 }) {
+  const { tints } = useTheme();
   const t = tints[tint];
   return (
     <View
@@ -464,29 +612,38 @@ export function Card({
   children,
   onPress,
   className = '',
+  style,
 }: {
   children: React.ReactNode;
   onPress?: () => void;
   className?: string;
+  style?: StyleProp<ViewStyle>;
 }) {
+  const { colors, isDark } = useTheme();
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
-      style={{
-        shadowColor: '#101828',
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 1,
-      }}
-      className={`rounded-2xl border border-line bg-surface active:opacity-90 ${className}`}>
+      style={[
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowColor: isDark ? '#000000' : '#101828',
+          shadowOpacity: isDark ? 0.35 : 0.05,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: 1,
+        },
+        style,
+      ]}
+      className={`rounded-2xl border active:opacity-90 ${className}`}>
       {children}
     </Pressable>
   );
 }
 
 export function Loading() {
+  const { colors } = useTheme();
   return (
     <View className="flex-1 items-center justify-center py-16">
       <ActivityIndicator color={colors.primary} />
@@ -505,25 +662,37 @@ export function EmptyState({
   text?: string;
   action?: React.ReactNode;
 }) {
+  const { colors } = useTheme();
   return (
     <View className="items-center px-8 py-16">
-      <View className="mb-4 h-20 w-20 items-center justify-center rounded-3xl bg-field">
+      <View
+        style={{ backgroundColor: colors.field }}
+        className="mb-4 h-20 w-20 items-center justify-center rounded-3xl">
         <Icon size={36} color={colors.textMuted} />
       </View>
-      <Text className="text-center text-lg font-bold text-ink">{title}</Text>
-      {text && <Text className="mt-2 text-center text-[15px] font-medium leading-6 text-ink-muted">{text}</Text>}
+      <Text style={{ color: colors.text }} className="text-center text-lg font-bold">
+        {title}
+      </Text>
+      {text && (
+        <Text
+          style={{ color: colors.textMuted }}
+          className="mt-2 text-center text-[15px] font-medium leading-6">
+          {text}
+        </Text>
+      )}
       {action && <View className="mt-6">{action}</View>}
     </View>
   );
 }
 
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useLanguage();
   return (
     <View className="mx-4 mb-3 rounded-2xl bg-danger-soft p-4">
       <Text className="text-[15px] font-semibold text-danger">{message}</Text>
       {onRetry && (
         <Pressable onPress={onRetry} className="mt-2.5 self-start">
-          <Text className="text-[15px] font-bold text-danger">Yenidən cəhd et</Text>
+          <Text className="text-[15px] font-bold text-danger">{t('common.retry')}</Text>
         </Pressable>
       )}
     </View>
@@ -531,6 +700,7 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
 }
 
 export function CountBadge({ count, tint }: { count: number; tint: TintName }) {
+  const { tints } = useTheme();
   const t = tints[tint];
   return (
     <View style={{ backgroundColor: t.tile }} className="min-w-[28px] items-center rounded-xl px-2.5 py-1">

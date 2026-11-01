@@ -1,5 +1,6 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { Appointment } from '../api/types';
 import type { RecordKind } from '../features/records';
 
 export type TabParamList = {
@@ -26,7 +27,7 @@ export type RootStackParamList = {
   RecordForm: { kind: RecordKind; id?: string };
   RecordDetail: { kind: RecordKind; id: string };
   Calendar: undefined;
-  AppointmentForm: { date?: string } | undefined;
+  AppointmentForm: { date?: string; appointment?: Appointment } | undefined;
   Ai: undefined;
   Patients: undefined;
   PatientForm: { id?: string } | undefined;

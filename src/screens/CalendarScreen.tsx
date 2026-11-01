@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -18,9 +18,10 @@ import {
   Stethoscope,
   User,
 } from 'lucide-react-native';
-import { appointmentsApi } from '../api/services';
-import type { Appointment } from '../api/types';
+import { appointmentsApi, patientsApi } from '../api/services';
+import type { Appointment, Patient } from '../api/types';
 import { MonthCalendar } from '../components/MonthCalendar';
+import { OfflineBanner } from '../components/OfflineBanner';
 import {
   AddButton,
   Card,
@@ -30,9 +31,12 @@ import {
   IconTile,
   ScreenHeader,
 } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { usePatient } from '../context/PatientContext';
+import { useTheme } from '../context/ThemeContext';
+import { localizeAppointmentTitle } from '../features/records';
 import type { RootScreenProps, TabParamList } from '../navigation/types';
-import { colors, tints, type TintName } from '../theme';
+import { type TintName } from '../theme';
 import {
   dayKey,
   formatDate,
@@ -45,7 +49,9 @@ import { useFocusData } from '../utils/hooks';
 import { cancelAppointmentNotification, syncUpcomingAppointments } from '../utils/notifications';
 
 export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
-  const { patient } = usePatient();
+  const { patient, patients } = usePatient();
+  const { language, t } = useLanguage();
+  const { colors, tints } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, 12);
   const [selected, setSelected] = useState(() => new Date());
@@ -57,15 +63,40 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
     error,
     reload,
   } = useFocusData(async () => {
-    if (!patient) {
+    let targetList: Patient[] = [];
+    if (patients && patients.length > 0) {
+      targetList = patients;
+    } else {
+      const list = await patientsApi.list().catch(() => []);
+      targetList = list;
+    }
+    if (targetList.length === 0 && patient) {
+      targetList = [patient];
+    }
+    if (targetList.length === 0) {
       return [];
     }
     const start = new Date(month.getFullYear(), month.getMonth(), 1, 0, 0, 0);
     const end = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59);
-    const list = await appointmentsApi.range(patient.id, toApiDate(start), toApiDate(end));
-    syncUpcomingAppointments(list);
-    return list;
-  }, [patient?.id, month.getFullYear(), month.getMonth()]);
+
+    const allAppointments: Appointment[] = [];
+    await Promise.all(
+      targetList.map(async p => {
+        try {
+          const list = await appointmentsApi.range(p.id, toApiDate(start), toApiDate(end));
+          for (const a of list) {
+            allAppointments.push(a);
+          }
+        } catch {}
+      }),
+    );
+    syncUpcomingAppointments(allAppointments);
+    return allAppointments;
+  }, [patient?.id, patients?.length, month.getFullYear(), month.getMonth()]);
+
+  useEffect(() => {
+    reload();
+  }, [patient?.id, patients?.length]);
 
   const markers = useMemo(() => {
     const map: Record<string, string> = {};
@@ -85,10 +116,14 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
   );
 
   const onMenu = (item: Appointment) => {
-    Alert.alert(item.title, `${formatDate(item.dateTime)} • ${formatTime(item.dateTime)}`, [
-      { text: 'Bağla', style: 'cancel' },
+    Alert.alert(localizeAppointmentTitle(item.title, t), `${formatDate(item.dateTime, language)} • ${formatTime(item.dateTime)}`, [
+      { text: t('common.close'), style: 'cancel' },
       {
-        text: 'Sil',
+        text: t('common.edit'),
+        onPress: () => navigation.navigate('AppointmentForm', { appointment: item }),
+      },
+      {
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -96,7 +131,7 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
             await appointmentsApi.remove(item.id);
             await reload();
           } catch (e) {
-            Alert.alert('Xəta', (e as Error).message);
+            Alert.alert(t('common.error'), (e as Error).message);
           }
         },
       },
@@ -104,18 +139,19 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
   };
 
   const isToday = isSameDay(selected, new Date());
-  const sectionLabel = isToday ? 'Bu gün' : formatDate(selected);
+  const sectionLabel = isToday ? t('calendar.today') : formatDate(selected, language);
 
   const goTab = (screen: keyof TabParamList) => {
     navigation.navigate('Tabs', { screen });
   };
 
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
+    <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScreenHeader
-        title="Təqvim"
+        title={t('calendar.title')}
         right={
           <AddButton
+            label={t('common.add')}
             onPress={() =>
               navigation.navigate('AppointmentForm', { date: toApiDate(selected) })
             }
@@ -128,6 +164,7 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
         contentContainerStyle={{ paddingBottom: 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} />}>
         {error && <ErrorBanner message={error} onRetry={reload} />}
+        <OfflineBanner onSyncComplete={reload} />
 
         <Card className="mx-4 mt-1 py-4">
           <MonthCalendar
@@ -145,15 +182,15 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
         </Card>
 
         <View className="mt-5 mb-3 flex-row items-center justify-between px-5">
-          <Text className="text-[18px] font-bold text-ink">{sectionLabel}</Text>
+          <Text style={{ color: colors.text }} className="text-[18px] font-bold">{sectionLabel}</Text>
           <CountBadge count={dayItems.length} tint="blue" />
         </View>
 
         {dayItems.length === 0 ? (
           <EmptyState
             icon={CalendarIcon}
-            title="Bu tarixdə görüş yoxdur"
-            text="Yeni görüş və ya xatırlatma əlavə edə bilərsiniz."
+            title={t('calendar.noAppointments')}
+            text={t('calendar.noAppointmentsDesc')}
           />
         ) : (
           dayItems.map(item => {
@@ -163,21 +200,26 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
                 : item.type === 'Other'
                   ? { icon: CalendarIcon, tint: 'green' }
                   : { icon: Stethoscope, tint: 'blue' };
-            const subtitle =
-              item.location || item.doctorSpecialty || item.notes || item.doctorName || '';
+            const p = patients.find(pat => pat.id === item.patientId);
+            const pName = p ? `${p.firstName} ${p.lastName}`.trim() : '';
+            const extra = item.location || item.doctorSpecialty || item.notes || item.doctorName || '';
+            const subtitle = [pName, extra].filter(Boolean).join(' • ');
 
             return (
-              <Card key={item.id} className="mx-4 mb-3.5 flex-row items-center px-4 py-4">
-                <Text className="w-16 text-[16px] font-bold text-ink">
+              <Card
+                key={item.id}
+                onPress={() => navigation.navigate('AppointmentForm', { appointment: item })}
+                className="mx-4 mb-3.5 flex-row items-center px-4 py-4">
+                <Text style={{ color: colors.text }} className="w-16 text-[16px] font-bold">
                   {formatTime(item.dateTime)}
                 </Text>
                 <IconTile icon={visual.icon} tint={visual.tint} size={50} iconSize={24} variant="soft" />
                 <View className="ml-3.5 flex-1">
-                  <Text className="text-[17px] font-bold text-ink" numberOfLines={1}>
-                    {item.title}
+                  <Text style={{ color: colors.text }} className="text-[17px] font-bold" numberOfLines={1}>
+                    {localizeAppointmentTitle(item.title, t)}
                   </Text>
                   {!!subtitle && (
-                    <Text className="mt-1 text-[14px] font-medium text-ink-muted" numberOfLines={1}>
+                    <Text style={{ color: colors.textMuted }} className="mt-1 text-[14px] font-medium" numberOfLines={1}>
                       {subtitle}
                     </Text>
                   )}
@@ -185,7 +227,8 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
                 <Pressable
                   onPress={() => onMenu(item)}
                   hitSlop={12}
-                  className="h-10 w-10 items-center justify-center rounded-xl bg-field active:bg-line">
+                  style={{ backgroundColor: colors.field }}
+                  className="h-10 w-10 items-center justify-center rounded-xl active:opacity-75">
                   <MoreVertical size={20} color={colors.textMuted} />
                 </Pressable>
               </Card>
@@ -196,12 +239,19 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
 
       {/* Bottom tab bar matching the mockup */}
       <View
-        style={{ paddingBottom: bottomPadding, paddingTop: 8, paddingHorizontal: 8 }}
-        className="flex-row border-t border-line bg-surface">
-        <TabShortcut icon={Home} label="Ana səhifə" active onPress={() => goTab('Home')} />
-        <TabShortcut icon={FileText} label="Sənədlər" onPress={() => goTab('Documents')} />
-        <TabShortcut icon={Search} label="Axtarış" onPress={() => goTab('Search')} />
-        <TabShortcut icon={User} label="Profil" onPress={() => goTab('Profile')} />
+        style={{
+          paddingBottom: bottomPadding,
+          paddingTop: 8,
+          paddingHorizontal: 8,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+        }}
+        className="flex-row">
+        <TabShortcut icon={Home} label={t('tab.home')} active onPress={() => goTab('Home')} />
+        <TabShortcut icon={FileText} label={t('tab.documents')} onPress={() => goTab('Documents')} />
+        <TabShortcut icon={Search} label={t('tab.search')} onPress={() => goTab('Search')} />
+        <TabShortcut icon={User} label={t('tab.profile')} onPress={() => goTab('Profile')} />
       </View>
     </SafeAreaView>
   );
@@ -218,6 +268,7 @@ function TabShortcut({
   active?: boolean;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
   const color = active ? colors.primary : colors.textLight;
   return (
     <Pressable onPress={onPress} className="flex-1 items-center py-1">

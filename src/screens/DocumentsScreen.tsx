@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -11,7 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronRight, Eye, FileText, Mic } from 'lucide-react-native';
 import { fileUrl } from '../api/client';
-import type { FileItem } from '../api/types';
+import { patientsApi } from '../api/services';
+import type { FileItem, Patient } from '../api/types';
 import { ImageViewer, openRemoteFile, VoicePlayer } from '../components/media';
 import {
   Card,
@@ -20,9 +21,10 @@ import {
   Loading,
   SearchBar,
 } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { usePatient } from '../context/PatientContext';
-import { RECORDS, type RecordKind } from '../features/records';
-import { colors, tints } from '../theme';
+import { localizeRecordTitle, RECORDS, type RecordKind } from '../features/records';
+import { useTheme } from '../context/ThemeContext';
 import { formatDate, formatSize } from '../utils/format';
 import { useFocusData } from '../utils/hooks';
 import { docLabel, isAudioFile, isImageFile } from '../utils/media';
@@ -33,11 +35,15 @@ interface AggregatedFile {
   recordTitle: string;
   recordDate: string;
   kind: RecordKind;
+  patientId: string;
+  patientName: string;
 }
 
 export function DocumentsScreen() {
   const navigation = useNavigation();
-  const { patient } = usePatient();
+  const { patient, patients } = usePatient();
+  const { language, t } = useLanguage();
+  const { colors, tints, isDark } = useTheme();
   const [search, setSearch] = useState('');
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
@@ -48,35 +54,66 @@ export function DocumentsScreen() {
     error,
     reload,
   } = useFocusData(async () => {
-    if (!patient) {
+    let targetList: Patient[] = [];
+    if (patients && patients.length > 0) {
+      targetList = patients;
+    } else {
+      const fetched = await patientsApi.list().catch(() => []);
+      targetList = fetched;
+    }
+
+    if (targetList.length === 0 && patient) {
+      targetList = [patient];
+    }
+
+    if (targetList.length === 0) {
       return [];
     }
-    const [complaints, examinations, diagnoses, treatments] = await Promise.all([
-      RECORDS.complaint.api.list(patient.id),
-      RECORDS.examination.api.list(patient.id),
-      RECORDS.diagnosis.api.list(patient.id),
-      RECORDS.treatment.api.list(patient.id),
-    ]);
+
     const list: AggregatedFile[] = [];
-    const collect = (kind: RecordKind, items: typeof complaints) => {
-      for (const rec of items) {
-        for (const f of rec.files) {
-          list.push({
-            file: f,
-            recordId: rec.id,
-            recordTitle: rec.title,
-            recordDate: rec.date,
-            kind,
-          });
+    await Promise.all(
+      targetList.map(async p => {
+        try {
+          const [complaints, examinations, diagnoses, treatments] = await Promise.all([
+            RECORDS.complaint.api.list(p.id).catch(() => []),
+            RECORDS.examination.api.list(p.id).catch(() => []),
+            RECORDS.diagnosis.api.list(p.id).catch(() => []),
+            RECORDS.treatment.api.list(p.id).catch(() => []),
+          ]);
+          const fullName = `${p.firstName} ${p.lastName}`.trim();
+          const collect = (kind: RecordKind, items: typeof complaints) => {
+            for (const rec of items) {
+              for (const f of rec.files ?? []) {
+                list.push({
+                  file: f,
+                  recordId: rec.id,
+                  recordTitle: rec.title,
+                  recordDate: rec.date,
+                  kind,
+                  patientId: p.id,
+                  patientName: fullName,
+                });
+              }
+            }
+          };
+          collect('examination', examinations);
+          collect('diagnosis', diagnoses);
+          collect('treatment', treatments);
+          collect('complaint', complaints);
+        } catch {
+          // ignore individual patient errors
         }
-      }
-    };
-    collect('examination', examinations);
-    collect('diagnosis', diagnoses);
-    collect('treatment', treatments);
-    collect('complaint', complaints);
-    return list;
-  }, [patient?.id]);
+      }),
+    );
+
+    return list.sort(
+      (a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime(),
+    );
+  }, [patient?.id, patients?.length]);
+
+  useEffect(() => {
+    reload();
+  }, [patient?.id, patients?.length]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -84,8 +121,10 @@ export function DocumentsScreen() {
       return allFiles ?? [];
     }
     return (allFiles ?? []).filter(
-      ({ file, recordTitle }) =>
-        file.fileName.toLowerCase().includes(q) || recordTitle.toLowerCase().includes(q),
+      ({ file, recordTitle, patientName }) =>
+        file.fileName.toLowerCase().includes(q) ||
+        recordTitle.toLowerCase().includes(q) ||
+        patientName.toLowerCase().includes(q),
     );
   }, [allFiles, search]);
 
@@ -110,13 +149,13 @@ export function DocumentsScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
+    <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }} className="flex-1">
       <View className="px-5 pt-3 pb-3">
-        <Text className="text-2xl font-bold text-ink">Sənədlər</Text>
+        <Text style={{ color: colors.text }} className="text-2xl font-bold">{t('documents.title')}</Text>
       </View>
 
       <SearchBar
-        placeholder="Fayl və ya sənəd axtar..."
+        placeholder={t('documents.searchPlaceholder')}
         value={search}
         onChangeText={setSearch}
       />
@@ -128,13 +167,13 @@ export function DocumentsScreen() {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={item => item.file.id}
+          keyExtractor={item => `${item.patientId}-${item.file.id}`}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={{ paddingTop: 4, paddingBottom: 32 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} />}
           renderItem={({ item }) => {
-            const { file, recordTitle, recordDate, kind, recordId } = item;
+            const { file, recordTitle, recordDate, kind, recordId, patientName } = item;
             const isImg = isImageFile(file);
             const isAud = isAudioFile(file);
             const badge = docLabel(file);
@@ -155,8 +194,8 @@ export function DocumentsScreen() {
                       onPress={() => openImage(file)}
                       hitSlop={6}
                       accessibilityRole="button"
-                      accessibilityLabel="Şəkli tam ekranda aç"
-                      className="relative overflow-hidden rounded-2xl border border-line active:opacity-80">
+                      style={{ borderColor: colors.border }}
+                      className="relative overflow-hidden rounded-2xl border active:opacity-80">
                       <Image
                         source={{ uri: fileUrl(file.filePath) }}
                         style={{ width: 56, height: 56 }}
@@ -186,13 +225,17 @@ export function DocumentsScreen() {
                   )}
 
                   <View className="ml-3.5 flex-1 justify-center">
-                    <Text className="text-[17px] font-bold text-ink" numberOfLines={1}>
-                      {recordTitle}
+                    <Text style={{ color: colors.text }} className="text-[17px] font-bold" numberOfLines={1}>
+                      {localizeRecordTitle(recordTitle, kind, t)}
                     </Text>
                     <Text
-                      className="mt-1 text-[14px] font-medium text-ink-muted"
+                      style={{ color: colors.textMuted }}
+                      className="mt-1 text-[13px] font-medium"
                       numberOfLines={1}>
-                      {file.fileName} • {formatSize(file.fileSize)} • {formatDate(recordDate)}
+                      {patientName} • {file.fileName} • {formatSize(file.fileSize)}
+                    </Text>
+                    <Text style={{ color: colors.textMuted }} className="mt-0.5 text-[12px]">
+                      {formatDate(recordDate, language)}
                     </Text>
                   </View>
 
@@ -202,8 +245,8 @@ export function DocumentsScreen() {
                         onPress={() => openImage(file)}
                         hitSlop={8}
                         accessibilityRole="button"
-                        accessibilityLabel="Şəkli böyüt"
-                        className="h-11 w-11 items-center justify-center rounded-xl bg-primary-soft active:opacity-70">
+                        style={{ backgroundColor: isDark ? '#1E3A8A' : colors.primarySoft }}
+                        className="h-11 w-11 items-center justify-center rounded-xl active:opacity-70">
                         <Eye size={20} color={colors.primary} strokeWidth={2.2} />
                       </Pressable>
                     )}
@@ -211,8 +254,8 @@ export function DocumentsScreen() {
                       onPress={() => navigation.navigate('RecordDetail', { kind, id: recordId })}
                       hitSlop={8}
                       accessibilityRole="button"
-                      accessibilityLabel="Qeydə bax"
-                      className="h-11 w-11 items-center justify-center rounded-xl bg-surface active:opacity-70">
+                      style={{ backgroundColor: isDark ? '#263345' : colors.surface }}
+                      className="h-11 w-11 items-center justify-center rounded-xl active:opacity-70">
                       <ChevronRight size={22} color={colors.textLight} strokeWidth={2.4} />
                     </Pressable>
                   </View>
@@ -229,8 +272,8 @@ export function DocumentsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon={FileText}
-              title="Sənəd tapılmadı"
-              text="Şikayət, müayinə, diaqnoz və müalicələrə əlavə edilən bütün fayllar burada görünəcək."
+              title={t('documents.emptyTitle')}
+              text={t('documents.emptyDesc')}
             />
           }
         />

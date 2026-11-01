@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Image,
   Pressable,
@@ -25,9 +25,13 @@ import {
 } from 'lucide-react-native';
 import { fileUrl } from '../api/client';
 import { diagnosesApi, patientsApi } from '../api/services';
+import { ImageViewer } from '../components/media';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { Button, CountBadge, EmptyState, ErrorBanner, IconTile } from '../components/ui';
+import { useLanguage } from '../context/LanguageContext';
 import { patientFullName, usePatient } from '../context/PatientContext';
-import { colors, tints, type TintName } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { type TintName } from '../theme';
 import { useFocusData } from '../utils/hooks';
 
 interface HomeRow {
@@ -43,7 +47,10 @@ interface HomeRow {
 
 export function PatientDashboardScreen() {
   const navigation = useNavigation();
+  const { t } = useLanguage();
+  const { isDark, colors, tints } = useTheme();
   const { patient, loading: loadingPatients, refresh: refreshPatients } = usePatient();
+  const [showViewer, setShowViewer] = useState(false);
 
   const {
     data: dashboardData,
@@ -75,8 +82,8 @@ export function PatientDashboardScreen() {
   const rows: HomeRow[] = [
     {
       key: 'complaints',
-      title: 'Şikayətlər',
-      subtitle: 'Şikayətlər, müşahidələr',
+      title: t('dashboard.complaints'),
+      subtitle: t('dashboard.complaintsDesc'),
       icon: Users,
       tint: 'blue',
       cardBg: '#F4F8FE',
@@ -85,8 +92,8 @@ export function PatientDashboardScreen() {
     },
     {
       key: 'examinations',
-      title: 'Müayinələr',
-      subtitle: 'Laboratoriya, analizlər və sənədlər',
+      title: t('dashboard.examinations'),
+      subtitle: t('dashboard.examinationsDesc'),
       icon: FlaskConical,
       tint: 'purple',
       cardBg: '#F7F4FE',
@@ -95,8 +102,8 @@ export function PatientDashboardScreen() {
     },
     {
       key: 'diagnoses',
-      title: 'Diaqnoz',
-      subtitle: 'Diaqnoz sənədləri',
+      title: t('dashboard.diagnoses'),
+      subtitle: t('dashboard.diagnosesDesc'),
       icon: Stethoscope,
       tint: 'green',
       cardBg: '#F2FBF6',
@@ -105,8 +112,8 @@ export function PatientDashboardScreen() {
     },
     {
       key: 'treatments',
-      title: 'Müalicə',
-      subtitle: 'Müalicə planları, reseptlər',
+      title: t('dashboard.treatments'),
+      subtitle: t('dashboard.treatmentsDesc'),
       icon: Pill,
       tint: 'orange',
       cardBg: '#FEF7F1',
@@ -115,8 +122,8 @@ export function PatientDashboardScreen() {
     },
     {
       key: 'ai',
-      title: 'AI',
-      subtitle: 'AI ilə bağlı sənədlər, qeydlər',
+      title: t('dashboard.ai'),
+      subtitle: t('dashboard.aiDesc'),
       icon: Brain,
       tint: 'purple',
       cardBg: '#F7F4FE',
@@ -131,8 +138,8 @@ export function PatientDashboardScreen() {
     },
     {
       key: 'calendar',
-      title: 'Təqvim',
-      subtitle: 'Görüşlər, xatırlatmalar',
+      title: t('dashboard.calendar'),
+      subtitle: t('dashboard.calendarDesc'),
       icon: Calendar,
       tint: 'blue',
       cardBg: '#F4F8FE',
@@ -142,7 +149,7 @@ export function PatientDashboardScreen() {
   ];
 
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-surface">
+    <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 28 }}
@@ -152,13 +159,15 @@ export function PatientDashboardScreen() {
           <Pressable
             onPress={() => navigation.goBack()}
             hitSlop={14}
-            className="h-11 w-11 items-center justify-center rounded-2xl border border-line bg-surface active:bg-field shadow-sm">
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+            className="h-11 w-11 items-center justify-center rounded-2xl border active:opacity-75 shadow-sm">
             <ArrowLeft size={24} color={colors.text} />
           </Pressable>
           <Pressable
             onPress={() => navigation.navigate('Calendar')}
             hitSlop={12}
-            className="h-11 w-11 items-center justify-center rounded-2xl bg-field active:bg-line">
+            style={{ backgroundColor: colors.field }}
+            className="h-11 w-11 items-center justify-center rounded-2xl active:opacity-75">
             <Bell size={24} color={colors.text} />
           </Pressable>
         </View>
@@ -166,7 +175,10 @@ export function PatientDashboardScreen() {
         {/* Centered Patient Profile (Photo, Name, Phone & Age) */}
         {patient && (
           <View className="mt-2 mb-6 items-center justify-center">
-            <View className="relative">
+            <Pressable
+              disabled={!patient.photoUrl}
+              onPress={() => setShowViewer(true)}
+              className="relative active:opacity-80">
               {patient.photoUrl ? (
                 <Image
                   source={{ uri: fileUrl(patient.photoUrl) }}
@@ -190,29 +202,30 @@ export function PatientDashboardScreen() {
                   </Text>
                 </View>
               )}
-            </View>
+            </Pressable>
 
             {/* Centered Name and Surname */}
-            <Text className="mt-2.5 text-center text-[22px] font-bold text-ink">
+            <Text style={{ color: colors.text }} className="mt-2.5 text-center text-[22px] font-bold">
               {patientFullName(patient)}
             </Text>
-            <Text className="mt-0.5 text-center text-[15px] font-medium text-ink-muted">
+            <Text style={{ color: colors.textMuted }} className="mt-0.5 text-center text-[15px] font-medium">
               {patient.phone}
-              {patient.age ? ` • ${patient.age} yaş` : ''}
+              {patient.age ? ` • ${patient.age} ${t('home.ageSuffix')}` : ''}
             </Text>
           </View>
         )}
 
+        <OfflineBanner onSyncComplete={onRefresh} />
         {error && <ErrorBanner message={error} onRetry={onRefresh} />}
 
         {!loadingPatients && !patient ? (
           <EmptyState
             icon={UserPlus}
-            title="Pasiyent seçilməyib"
-            text="Tibbi qeydləri, şikayətləri və müayinələri idarə etmək üçün pasiyenti seçin."
+            title={t('dashboard.noPatient')}
+            text={t('dashboard.noPatientDesc')}
             action={
               <Button
-                label="Pasiyentlər siyahısına qayıt"
+                label={t('dashboard.backToList')}
                 onPress={() => navigation.goBack()}
               />
             }
@@ -224,14 +237,14 @@ export function PatientDashboardScreen() {
                 key={r.key}
                 onPress={r.onPress}
                 style={{
-                  backgroundColor: r.cardBg,
-                  borderColor: tints[r.tint].tile,
+                  backgroundColor: isDark ? colors.surface : r.cardBg,
+                  borderColor: isDark ? colors.border : tints[r.tint].tile,
                 }}
                 className="mb-4 flex-row items-center rounded-2xl border p-4 active:opacity-85 shadow-sm">
                 <IconTile icon={r.icon} tint={r.tint} size={54} iconSize={26} variant="tile" />
                 <View className="ml-4 flex-1">
-                  <Text className="text-[18px] font-bold text-ink">{r.title}</Text>
-                  <Text className="mt-0.5 text-[14px] font-medium text-ink-muted" numberOfLines={1}>
+                  <Text style={{ color: colors.text }} className="text-[18px] font-bold">{r.title}</Text>
+                  <Text style={{ color: colors.textMuted }} className="mt-0.5 text-[14px] font-medium" numberOfLines={1}>
                     {r.subtitle}
                   </Text>
                 </View>
@@ -246,6 +259,14 @@ export function PatientDashboardScreen() {
           </View>
         )}
       </ScrollView>
+
+      {patient?.photoUrl && (
+        <ImageViewer
+          uris={[fileUrl(patient.photoUrl) || '']}
+          index={showViewer ? 0 : null}
+          onClose={() => setShowViewer(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }

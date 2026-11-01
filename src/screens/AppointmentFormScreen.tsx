@@ -18,11 +18,17 @@ import {
   Segmented,
   type ChipOption,
 } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { usePatient } from '../context/PatientContext';
+import { useTheme } from '../context/ThemeContext';
 import type { RootScreenProps } from '../navigation/types';
-import { colors } from '../theme';
-import { formatDateLong, parseDate, toApiDate } from '../utils/format';
-import { requestNotificationPermission, scheduleAppointmentNotification } from '../utils/notifications';
+import { formatDateLong, formatTime, parseDate, toApiDate } from '../utils/format';
+import {
+  cancelAppointmentNotification,
+  requestNotificationPermission,
+  scheduleAppointmentNotification,
+} from '../utils/notifications';
 
 const TYPES: ChipOption<AppointmentType>[] = [
   { value: 'DoctorVisit', label: 'Həkim müayinəsi' },
@@ -36,15 +42,35 @@ export function AppointmentFormScreen({
   navigation,
   route,
 }: RootScreenProps<'AppointmentForm'>) {
+  const { user } = useAuth();
+  const { language, t } = useLanguage();
+  const { colors } = useTheme();
   const { patient, refresh: refreshPatients } = usePatient();
-  const initialDate = route.params?.date ? parseDate(route.params.date) : new Date();
+  const editing = route.params?.appointment;
+  const isEditing = !!editing;
 
-  const [type, setType] = useState<AppointmentType>('DoctorVisit');
-  const [title, setTitle] = useState('Həkim müayinəsi');
-  const [location, setLocation] = useState('');
-  const [date, setDate] = useState(initialDate);
-  const [time, setTime] = useState('10:00');
-  const [notes, setNotes] = useState('');
+  const types: ChipOption<AppointmentType>[] = [
+    { value: 'DoctorVisit', label: t('appointment.doctorVisit') },
+    { value: 'LabTest', label: t('appointment.labTest') },
+    { value: 'Other', label: t('appointment.other') },
+  ];
+
+  const [type, setType] = useState<AppointmentType>(editing?.type ?? 'DoctorVisit');
+  const [title, setTitle] = useState(editing?.title ?? t('appointment.doctorVisit'));
+  const [location, setLocation] = useState(editing?.location ?? '');
+  const [date, setDate] = useState(() => {
+    if (editing?.dateTime) {
+      return parseDate(editing.dateTime);
+    }
+    return route.params?.date ? parseDate(route.params.date) : new Date();
+  });
+  const [time, setTime] = useState(() => {
+    if (editing?.dateTime) {
+      return formatTime(editing.dateTime);
+    }
+    return '10:00';
+  });
+  const [notes, setNotes] = useState(editing?.notes ?? '');
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -54,119 +80,149 @@ export function AppointmentFormScreen({
 
   const onTypeChange = (next: AppointmentType) => {
     setType(next);
-    if (title === 'Həkim müayinəsi' || title === 'Qan analizi' || !title.trim()) {
-      setTitle(next === 'LabTest' ? 'Qan analizi' : 'Həkim müayinəsi');
+    if (
+      title === t('appointment.doctorVisit') ||
+      title === t('appointment.labTest') ||
+      !title.trim()
+    ) {
+      setTitle(next === 'LabTest' ? t('appointment.labTest') : t('appointment.doctorVisit'));
     }
   };
 
   const onSave = async () => {
-    if (!patient) {
-      Alert.alert('Diqqət', 'Əvvəlcə pasiyent seçin.');
+    if (!isEditing && !patient) {
+      Alert.alert(t('common.attention'), t('form.needPatient'));
       return;
     }
     if (!title.trim()) {
-      Alert.alert('Diqqət', 'Başlıq daxil edin.');
+      Alert.alert(t('common.attention'), t('appointment.needTitle'));
       return;
     }
     const m = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
     if (!m) {
-      Alert.alert('Diqqət', 'Saatı SS:DD formatında daxil edin (məs: 10:00).');
+      Alert.alert(t('common.attention'), t('appointment.invalidTime'));
       return;
     }
     const dt = new Date(date);
     dt.setHours(Math.min(23, Number(m[1])), Math.min(59, Number(m[2])), 0, 0);
+    const isoDateTime = toApiDate(dt);
 
     setSaving(true);
     try {
-      const created = await appointmentsApi.create({
-        patientId: patient.id,
-        title: title.trim(),
-        location: location.trim() || null,
-        dateTime: toApiDate(dt),
-        notes: notes.trim() || null,
-        type,
-      });
-
-      // Schedule notification reminder for this appointment
-      if (created?.id) {
-        await scheduleAppointmentNotification({
-          id: created.id,
-          title: created.title,
-          patientName: patient ? `${patient.firstName} ${patient.lastName}` : null,
-          dateTime: created.dateTime,
+      if (isEditing && editing) {
+        const resolvedDoctorId = editing.doctorId || user?.doctorId || null;
+        await appointmentsApi.update(editing.id, {
+          title: title.trim(),
+          location: location.trim() || null,
+          dateTime: isoDateTime,
+          notes: notes.trim() || null,
+          type,
+          doctorId: resolvedDoctorId,
         });
+
+        // Reschedule notification
+        try {
+          await cancelAppointmentNotification(editing.id);
+          await scheduleAppointmentNotification({
+            id: editing.id,
+            title: title.trim(),
+            patientName:
+              patient ? `${patient.firstName} ${patient.lastName}` : (editing.patientName || null),
+            dateTime: isoDateTime,
+          });
+        } catch {}
+      } else if (patient) {
+        const created = await appointmentsApi.create({
+          patientId: patient.id,
+          title: title.trim(),
+          location: location.trim() || null,
+          dateTime: isoDateTime,
+          notes: notes.trim() || null,
+          type,
+        });
+
+        // Schedule notification reminder for this appointment
+        if (created?.id) {
+          try {
+            await scheduleAppointmentNotification({
+              id: created.id,
+              title: created.title,
+              patientName: `${patient.firstName} ${patient.lastName}`.trim(),
+              dateTime: created.dateTime,
+            });
+          } catch {}
+        }
       }
 
       await refreshPatients();
       navigation.goBack();
     } catch (e) {
-      Alert.alert('Xəta', (e as Error).message);
+      Alert.alert(t('common.error'), (e as Error).message);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-canvas">
+    <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScreenHeader
-        title="Yeni görüş"
-        right={<Button label="Saxla" size="sm" loading={saving} onPress={onSave} />}
+        title={isEditing ? t('appointment.editAppointment') : t('appointment.newAppointment')}
       />
 
       <KeyboardScrollView className="flex-1 px-4 pt-2">
-        <Segmented options={TYPES} value={type} onChange={onTypeChange} />
+        <Segmented options={types} value={type} onChange={onTypeChange} />
 
         <Field
-          label="Başlıq"
-          placeholder="Məs: Həkim müayinəsi, Qan analizi"
+          label={t('appointment.title')}
+          placeholder={t('appointment.titlePlh')}
           value={title}
           onChangeText={setTitle}
         />
 
         <Field
-          label="İxtisas / Klinika"
-          placeholder="Məs: Nevroloq, Lab klinika"
+          label={t('appointment.location')}
+          placeholder={t('appointment.locationPlh')}
           value={location}
           onChangeText={setLocation}
         />
 
         <View className="mb-5">
-          <Text className="mb-2 text-[16px] font-bold text-ink">Tarix</Text>
+          <Text style={{ color: colors.text }} className="mb-2 text-[16px] font-bold">{t('form.date')}</Text>
           <Pressable
             onPress={() => setShowPicker(true)}
             hitSlop={10}
-            className="flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3.5">
-            <Text className="text-[16px] font-semibold text-ink">{formatDateLong(date)}</Text>
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+            className="flex-row items-center justify-between rounded-2xl border px-4 py-3.5">
+            <Text style={{ color: colors.text }} className="text-[16px] font-semibold">{formatDateLong(date, language)}</Text>
             <Calendar size={22} color={colors.textMuted} />
           </Pressable>
         </View>
 
         <Field
-          label="Saat"
+          label={t('appointment.time')}
           placeholder="10:00"
           value={time}
           onChangeText={setTime}
         />
 
         <View className="-mt-2 mb-5 flex-row flex-wrap gap-2.5">
-          {QUICK_TIMES.map(t => (
+          {QUICK_TIMES.map(tm => (
             <Pressable
-              key={t}
-              onPress={() => setTime(t)}
+              key={tm}
+              onPress={() => setTime(tm)}
               hitSlop={6}
-              className={`rounded-xl px-4 py-2.5 ${
-                time === t ? 'bg-primary' : 'bg-field'
-              }`}>
-              <Text className={`text-[14px] font-bold ${time === t ? 'text-white' : 'text-ink'}`}>
-                {t}
+              style={{ backgroundColor: time === tm ? colors.primary : colors.field }}
+              className="rounded-xl px-4 py-2.5">
+              <Text style={{ color: time === tm ? '#ffffff' : colors.text }} className="text-[14px] font-bold">
+                {tm}
               </Text>
             </Pressable>
           ))}
         </View>
 
         <Field
-          label="Qeyd"
-          placeholder="Əlavə qeydlər, xatırlatma..."
+          label={t('appointment.notes')}
+          placeholder={t('appointment.notesPlh')}
           multiline
           value={notes}
           onChangeText={setNotes}
@@ -174,7 +230,7 @@ export function AppointmentFormScreen({
 
         <View className="mt-2 mb-8">
           <Button
-            label="Yadda saxla"
+            label={t('common.save')}
             size="lg"
             loading={saving}
             onPress={onSave}

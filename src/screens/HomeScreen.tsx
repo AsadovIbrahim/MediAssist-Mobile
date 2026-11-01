@@ -20,6 +20,8 @@ import {
 import { fileUrl } from '../api/client';
 import { patientsApi } from '../api/services';
 import type { Patient } from '../api/types';
+import { ImageViewer } from '../components/media';
+import { OfflineBanner } from '../components/OfflineBanner';
 import {
   Button,
   Card,
@@ -28,12 +30,15 @@ import {
   SearchBar,
 } from '../components/ui';
 import { firstNameOf, useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { patientFullName, usePatient } from '../context/PatientContext';
-import { colors, tints } from '../theme';
+import { useTheme } from '../context/ThemeContext';
 
 export function HomeScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { t } = useLanguage();
+  const { colors, tints, isDark } = useTheme();
   const {
     patients,
     loading,
@@ -42,6 +47,7 @@ export function HomeScreen() {
     select,
   } = usePatient();
   const [search, setSearch] = useState('');
+  const [viewPhotoUri, setViewPhotoUri] = useState<string | null>(null);
 
   const greetingName =
     firstNameOf(user?.fullName) || 'İbrahim';
@@ -59,17 +65,17 @@ export function HomeScreen() {
   }, [patients, search]);
 
   const confirmDelete = (p: Patient) => {
-    Alert.alert('Pasiyent silinsin?', patientFullName(p), [
-      { text: 'Ləğv et', style: 'cancel' },
+    Alert.alert(t('home.deleteConfirmTitle'), patientFullName(p), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sil',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
             await patientsApi.remove(p.id);
             await refresh();
           } catch (e) {
-            Alert.alert('Xəta', (e as Error).message);
+            Alert.alert(t('common.error'), (e as Error).message);
           }
         },
       },
@@ -77,30 +83,33 @@ export function HomeScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-surface">
+    <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }} className="flex-1">
       {/* Top Greeting Header */}
       <View className="flex-row items-center justify-between px-5 pt-3 pb-3">
         <View className="flex-1 pr-3">
-          <Text className="text-[28px] font-bold text-ink" numberOfLines={1}>
-            Salam, {greetingName}!
+          <Text style={{ color: colors.text }} className="text-[28px] font-bold" numberOfLines={1}>
+            {t('home.greeting')}, {greetingName}!
           </Text>
-          <Text className="mt-0.5 text-[15px] font-medium text-ink-muted">
-            Pasiyentlərin siyahısı
+          <Text style={{ color: colors.textMuted }} className="mt-0.5 text-[15px] font-medium">
+            {t('home.patientList')}
           </Text>
         </View>
         <Pressable
           onPress={() => navigation.navigate('Calendar')}
           hitSlop={12}
           accessibilityRole="button"
-          accessibilityLabel="Bildirişlər və Təqvim"
-          className="h-12 w-12 items-center justify-center rounded-2xl bg-field border border-line active:bg-line">
+          accessibilityLabel={t('dashboard.calendar')}
+          style={{ backgroundColor: colors.field, borderColor: colors.border }}
+          className="h-12 w-12 items-center justify-center rounded-2xl border active:opacity-70">
           <Bell size={24} color={colors.text} />
         </Pressable>
       </View>
 
+      <OfflineBanner />
+
       {/* Search Bar */}
       <SearchBar
-        placeholder="Pasiyent adı və ya telefon..."
+        placeholder={t('home.searchPlaceholder')}
         value={search}
         onChangeText={setSearch}
       />
@@ -122,10 +131,18 @@ export function HomeScreen() {
             }}
             className="mx-4 mb-3.5 flex-row items-center p-4">
             {item.photoUrl ? (
-              <Image
-                source={{ uri: fileUrl(item.photoUrl) }}
-                style={{ width: 54, height: 54, borderRadius: 27 }}
-              />
+              <Pressable
+                onPress={e => {
+                  e.stopPropagation();
+                  setViewPhotoUri(fileUrl(item.photoUrl) || null);
+                }}
+                hitSlop={6}
+                className="active:opacity-80">
+                <Image
+                  source={{ uri: fileUrl(item.photoUrl) }}
+                  style={{ width: 54, height: 54, borderRadius: 27 }}
+                />
+              </Pressable>
             ) : (
               <View
                 style={{ backgroundColor: tints.blue.tile }}
@@ -137,12 +154,12 @@ export function HomeScreen() {
             )}
 
             <View className="ml-3.5 flex-1">
-              <Text className="text-[17px] font-bold text-ink">
+              <Text style={{ color: colors.text }} className="text-[17px] font-bold">
                 {patientFullName(item)}
               </Text>
-              <Text className="mt-1 text-[14px] font-medium text-ink-muted">
+              <Text style={{ color: colors.textMuted }} className="mt-1 text-[14px] font-medium">
                 {item.phone}
-                {item.age ? ` • ${item.age} yaş` : ''}
+                {item.age ? ` • ${item.age} ${t('home.ageSuffix')}` : ''}
               </Text>
             </View>
 
@@ -150,13 +167,15 @@ export function HomeScreen() {
               <Pressable
                 onPress={() => navigation.navigate('PatientForm', { id: item.id })}
                 hitSlop={10}
-                className="h-10 w-10 items-center justify-center rounded-xl bg-primary-soft active:opacity-70">
+                style={{ backgroundColor: isDark ? '#1E3A8A' : colors.primarySoft }}
+                className="h-10 w-10 items-center justify-center rounded-xl active:opacity-70">
                 <Edit3 size={19} color={colors.primary} />
               </Pressable>
               <Pressable
                 onPress={() => confirmDelete(item)}
                 hitSlop={10}
-                className="h-10 w-10 items-center justify-center rounded-xl bg-danger-soft active:opacity-70">
+                style={{ backgroundColor: isDark ? '#450A0A' : colors.dangerSoft }}
+                className="h-10 w-10 items-center justify-center rounded-xl active:opacity-70">
                 <Trash2 size={19} color={colors.danger} />
               </Pressable>
             </View>
@@ -165,11 +184,11 @@ export function HomeScreen() {
         ListEmptyComponent={
           <EmptyState
             icon={Users}
-            title="Pasiyent yoxdur"
-            text="Yeni pasiyent əlavə edərək tibbi qeydləri idarə edin."
+            title={t('home.noPatients')}
+            text={t('home.noPatientsDesc')}
             action={
               <Button
-                label="Pasiyent əlavə et"
+                label={t('home.newPatient')}
                 icon={UserPlus}
                 onPress={() => navigation.navigate('PatientForm')}
               />
@@ -182,7 +201,7 @@ export function HomeScreen() {
       <Pressable
         onPress={() => navigation.navigate('PatientForm')}
         accessibilityRole="button"
-        accessibilityLabel="Yeni pasiyent əlavə et"
+        accessibilityLabel={t('home.newPatient')}
         style={{
           shadowColor: colors.primary,
           shadowOffset: { width: 0, height: 4 },
@@ -193,9 +212,17 @@ export function HomeScreen() {
         className="absolute bottom-6 right-5 flex-row items-center rounded-full bg-primary px-5 py-3.5 active:opacity-90">
         <UserPlus size={22} color="#ffffff" strokeWidth={2.4} />
         <Text className="ml-2.5 text-[16px] font-bold text-white">
-          Yeni pasiyent
+          {t('home.newPatient')}
         </Text>
       </Pressable>
+
+      {viewPhotoUri && (
+        <ImageViewer
+          uris={[viewPhotoUri]}
+          index={0}
+          onClose={() => setViewPhotoUri(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }

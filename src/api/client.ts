@@ -11,6 +11,7 @@ export class ApiError extends Error {
 let baseUrl = '';
 let authToken: string | null = null;
 let unauthorizedHandler: (() => void) | null = null;
+let connectivityHandler: ((online: boolean) => void) | null = null;
 
 export const apiConfig = {
   setBaseUrl(url: string) {
@@ -24,6 +25,9 @@ export const apiConfig = {
   },
   onUnauthorized(handler: (() => void) | null) {
     unauthorizedHandler = handler;
+  },
+  onConnectivity(handler: ((online: boolean) => void) | null) {
+    connectivityHandler = handler;
   },
 };
 
@@ -102,7 +106,9 @@ async function send<T>(url: string, init: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, { ...init, headers });
+    connectivityHandler?.(true);
   } catch {
+    connectivityHandler?.(false);
     throw new ApiError(
       'Serverlə əlaqə yaradıla bilmədi. İnternet bağlantınızı yoxlayın.',
       0,
@@ -160,7 +166,7 @@ export function fileUrl(filePath: string | null | undefined): string | undefined
   if (!filePath) {
     return undefined;
   }
-  if (/^https?:\/\//i.test(filePath)) {
+  if (/^https?:\/\//i.test(filePath) || /^file:\/\//i.test(filePath)) {
     return filePath;
   }
   const clean = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
