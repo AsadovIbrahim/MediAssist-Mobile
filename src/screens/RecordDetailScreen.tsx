@@ -151,9 +151,12 @@ export function RecordDetailScreen({ navigation, route }: RootScreenProps<'Recor
             </View>
           </View>
 
-          {!!item.description && (
-            <Text style={{ color: colors.text }} className="mt-4 text-[16px] leading-7">{item.description}</Text>
-          )}
+          {!!item.description &&
+            item.description.trim().toLowerCase() !== item.title.trim().toLowerCase() && (
+              <Text style={{ color: colors.text }} className="mt-4 text-[16px] leading-7">
+                {item.description}
+              </Text>
+            )}
         </Card>
 
         {images.length > 0 && (

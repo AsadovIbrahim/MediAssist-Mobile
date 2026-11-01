@@ -47,10 +47,54 @@ export const patientsApi = {
   list: async (search?: string): Promise<Patient[]> => {
     try {
       const remote = await http.get<Patient[]>('patients', { search });
-      if (!search) {
-        await offlineStorage.savePatients(remote);
+      const queue = await offlineStorage.getQueue();
+      const pendingIds = new Set(
+        queue
+          .filter(q => q.type === 'create_patient')
+          .map(q => q.recordId)
+          .filter(Boolean),
+      );
+
+      const cached = await offlineStorage.getPatients();
+      const localPending = (cached || []).filter(
+        p => p.id.startsWith('local_p_') && pendingIds.has(p.id),
+      );
+
+      const remoteKeys = new Set(
+        remote.map(
+          p => `${p.firstName} ${p.lastName} ${p.phone}`.toLowerCase(),
+        ),
+      );
+      const unSyncedLocal = localPending.filter(
+        p =>
+          !remoteKeys.has(
+            `${p.firstName} ${p.lastName} ${p.phone}`.toLowerCase(),
+          ),
+      );
+
+      const seenIds = new Set<string>();
+      const merged: Patient[] = [];
+      for (const p of [...unSyncedLocal, ...remote]) {
+        if (!seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          merged.push(p);
+        }
       }
-      return remote;
+
+      if (!search) {
+        await offlineStorage.savePatients(merged);
+      }
+
+      if (search) {
+        const s = search.toLowerCase();
+        return merged.filter(
+          p =>
+            p.firstName.toLowerCase().includes(s) ||
+            p.lastName.toLowerCase().includes(s) ||
+            p.phone.includes(s),
+        );
+      }
+      return merged;
     } catch (e: any) {
       if (e?.status === 0 || !e?.status) {
         const cached = await offlineStorage.getPatients();
@@ -129,6 +173,7 @@ export const patientsApi = {
         await offlineStorage.savePatients([localPatient, ...cached]);
         await offlineStorage.enqueue({
           type: 'create_patient',
+          recordId: localPatient.id,
           payload: dto,
           files: photo ? [photo] : undefined,
         });
@@ -297,8 +342,41 @@ export const appointmentsApi = {
         startDate,
         endDate,
       });
-      await offlineStorage.saveAppointments(patientId, remote);
-      return remote;
+      const queue = await offlineStorage.getQueue();
+      const pendingIds = new Set(
+        queue
+          .filter(
+            q =>
+              q.type === 'create_appointment' &&
+              q.payload?.patientId === patientId,
+          )
+          .map(q => q.recordId)
+          .filter(Boolean),
+      );
+
+      const cached = await offlineStorage.getAppointments(patientId);
+      const localPending = (cached || []).filter(
+        a => a.id.startsWith('local_app_') && pendingIds.has(a.id),
+      );
+
+      const remoteKeys = new Set(
+        remote.map(a => `${a.title} ${a.dateTime}`.toLowerCase()),
+      );
+      const unSyncedLocal = localPending.filter(
+        a => !remoteKeys.has(`${a.title} ${a.dateTime}`.toLowerCase()),
+      );
+
+      const seenIds = new Set<string>();
+      const merged: Appointment[] = [];
+      for (const a of [...unSyncedLocal, ...remote]) {
+        if (!seenIds.has(a.id)) {
+          seenIds.add(a.id);
+          merged.push(a);
+        }
+      }
+
+      await offlineStorage.saveAppointments(patientId, merged);
+      return merged;
     } catch (e: any) {
       if (e?.status === 0 || !e?.status) {
         const cached = await offlineStorage.getAppointments(patientId);
@@ -335,6 +413,7 @@ export const appointmentsApi = {
         await offlineStorage.saveAppointments(dto.patientId, [localApp, ...cached]);
         await offlineStorage.enqueue({
           type: 'create_appointment',
+          recordId: localApp.id,
           payload: dto,
         });
         return localApp;

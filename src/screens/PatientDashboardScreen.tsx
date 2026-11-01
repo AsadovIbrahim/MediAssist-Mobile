@@ -33,6 +33,7 @@ import { patientFullName, usePatient } from '../context/PatientContext';
 import { useTheme } from '../context/ThemeContext';
 import { type TintName } from '../theme';
 import { useFocusData } from '../utils/hooks';
+import { offlineStorage } from '../utils/offlineStorage';
 
 interface HomeRow {
   key: string;
@@ -61,16 +62,66 @@ export function PatientDashboardScreen() {
     if (!patient) {
       return null;
     }
-    const [dash, allDiagnoses] = await Promise.all([
-      patientsApi.dashboard(patient.id),
+    const [
+      dash,
+      allDiagnoses,
+      localComplaints,
+      localExams,
+      localDiagnoses,
+      localTreatments,
+    ] = await Promise.all([
+      patientsApi.dashboard(patient.id).catch(() => null),
       diagnosesApi.list(patient.id).catch(() => []),
+      offlineStorage.getRecords(patient.id, 'complaint'),
+      offlineStorage.getRecords(patient.id, 'examination'),
+      offlineStorage.getRecords(patient.id, 'diagnosis'),
+      offlineStorage.getRecords(patient.id, 'treatment'),
     ]);
-    const examCount = allDiagnoses.filter(d => d.description?.startsWith('[Müayinə]')).length;
-    const diagCount = allDiagnoses.filter(d => !d.description?.startsWith('[Müayinə]')).length;
+
+    const pendingComplaints = (localComplaints || []).filter(r =>
+      r.id.startsWith('local_'),
+    ).length;
+    const complaintCount =
+      dash != null
+        ? dash.complaintCount + pendingComplaints
+        : localComplaints?.length ?? patient.complaintCount ?? 0;
+
+    const pendingExams = (localExams || []).filter(r =>
+      r.id.startsWith('local_'),
+    ).length;
+    const serverExams = allDiagnoses.filter(d =>
+      d.description?.startsWith('[Müayinə]'),
+    ).length;
+    const examCount =
+      allDiagnoses.length > 0
+        ? serverExams + pendingExams
+        : localExams?.length ?? 0;
+
+    const pendingDiags = (localDiagnoses || []).filter(r =>
+      r.id.startsWith('local_'),
+    ).length;
+    const serverDiags = allDiagnoses.filter(
+      d => !d.description?.startsWith('[Müayinə]'),
+    ).length;
+    const diagCount =
+      allDiagnoses.length > 0
+        ? serverDiags + pendingDiags
+        : localDiagnoses?.length ?? dash?.diagnosisCount ?? patient.diagnosisCount ?? 0;
+
+    const pendingTreatments = (localTreatments || []).filter(r =>
+      r.id.startsWith('local_'),
+    ).length;
+    const treatmentCount =
+      dash != null
+        ? dash.treatmentCount + pendingTreatments
+        : localTreatments?.length ?? patient.treatmentCount ?? 0;
+
     return {
       dash,
+      complaintCount,
       examCount,
       diagCount,
+      treatmentCount,
     };
   }, [patient?.id]);
 
@@ -87,7 +138,7 @@ export function PatientDashboardScreen() {
       icon: Users,
       tint: 'blue',
       cardBg: '#F4F8FE',
-      count: dashboardData?.dash?.complaintCount ?? patient?.complaintCount ?? 0,
+      count: dashboardData?.complaintCount ?? patient?.complaintCount ?? 0,
       onPress: () => navigation.navigate('RecordList', { kind: 'complaint' }),
     },
     {
@@ -107,7 +158,11 @@ export function PatientDashboardScreen() {
       icon: Stethoscope,
       tint: 'green',
       cardBg: '#F2FBF6',
-      count: dashboardData?.diagCount ?? dashboardData?.dash?.diagnosisCount ?? patient?.diagnosisCount ?? 0,
+      count:
+        dashboardData?.diagCount ??
+        dashboardData?.dash?.diagnosisCount ??
+        patient?.diagnosisCount ??
+        0,
       onPress: () => navigation.navigate('RecordList', { kind: 'diagnosis' }),
     },
     {
@@ -117,7 +172,7 @@ export function PatientDashboardScreen() {
       icon: Pill,
       tint: 'orange',
       cardBg: '#FEF7F1',
-      count: dashboardData?.dash?.treatmentCount ?? patient?.treatmentCount ?? 0,
+      count: dashboardData?.treatmentCount ?? patient?.treatmentCount ?? 0,
       onPress: () => navigation.navigate('RecordList', { kind: 'treatment' }),
     },
     {
@@ -129,10 +184,10 @@ export function PatientDashboardScreen() {
       cardBg: '#F7F4FE',
       count:
         dashboardData?.dash?.aiDocumentCount ||
-        (dashboardData?.dash
-          ? dashboardData.dash.complaintCount +
-            (dashboardData.dash.diagnosisCount ?? 0) +
-            dashboardData.dash.treatmentCount
+        (dashboardData
+          ? (dashboardData.complaintCount ?? 0) +
+            (dashboardData.diagCount ?? 0) +
+            (dashboardData.treatmentCount ?? 0)
           : 0),
       onPress: () => navigation.navigate('Ai'),
     },

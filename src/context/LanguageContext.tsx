@@ -139,6 +139,9 @@ export const TRANSLATIONS = {
     'common.error': 'Xəta',
     'common.attention': 'Diqqət',
     'common.retry': 'Yenidən cəhd et',
+    'common.selected': 'seçildi',
+    'common.selectAll': 'Hamısı',
+    'common.deselectAll': 'Ləğv et',
 
     // Dashboard Extra
     'dashboard.noPatient': 'Pasiyent seçilməyib',
@@ -403,6 +406,9 @@ export const TRANSLATIONS = {
     'common.error': 'Error',
     'common.attention': 'Notice',
     'common.retry': 'Try again',
+    'common.selected': 'selected',
+    'common.selectAll': 'Select all',
+    'common.deselectAll': 'Deselect',
 
     // Dashboard Extra
     'dashboard.noPatient': 'No patient selected',
@@ -667,6 +673,9 @@ export const TRANSLATIONS = {
     'common.error': 'Ошибка',
     'common.attention': 'Внимание',
     'common.retry': 'Повторить',
+    'common.selected': 'выбрано',
+    'common.selectAll': 'Все',
+    'common.deselectAll': 'Снять выбор',
 
     // Dashboard Extra
     'dashboard.noPatient': 'Пациент не выбран',

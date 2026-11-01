@@ -68,7 +68,7 @@ export interface RecordConfig {
   api: RecordApi;
 }
 
-const fromComplaint = (c: Complaint): RecordItem => ({
+export const fromComplaint = (c: Complaint): RecordItem => ({
   id: c.id,
   title: c.title,
   description: c.description,
@@ -77,7 +77,7 @@ const fromComplaint = (c: Complaint): RecordItem => ({
   files: c.attachments ?? [],
 });
 
-const fromDoc = (d: Diagnosis | Treatment): RecordItem => ({
+export const fromDoc = (d: Diagnosis | Treatment): RecordItem => ({
   id: d.id,
   title: d.title,
   description: d.description,
@@ -86,7 +86,7 @@ const fromDoc = (d: Diagnosis | Treatment): RecordItem => ({
   files: d.documents ?? [],
 });
 
-const fromExamination = (d: Diagnosis): RecordItem => ({
+export const fromExamination = (d: Diagnosis): RecordItem => ({
   id: d.id,
   title: d.title,
   description: d.description
@@ -108,15 +108,70 @@ async function cachedList(
 ): Promise<RecordItem[]> {
   try {
     const remote = await fetcher();
-    if (!filter && !search) {
-      await offlineStorage.saveRecords(patientId, kind, remote);
+    const queue = await offlineStorage.getQueue();
+    const pendingIds = new Set(
+      queue
+        .filter(
+          q =>
+            q.type === 'create_record' &&
+            q.recordKind === kind &&
+            q.patientId === patientId,
+        )
+        .map(q => q.recordId)
+        .filter(Boolean),
+    );
+
+    const cached = await offlineStorage.getRecords(patientId, kind);
+    // Keep only local items that are strictly still pending in the queue
+    const localPending = (cached || []).filter(
+      r => r.id.startsWith('local_') && pendingIds.has(r.id),
+    );
+
+    // Drop any local item if remote already contains the same title
+    const remoteTitles = new Set(
+      remote.map(r => r.title.trim().toLowerCase()),
+    );
+    const unSyncedLocal = localPending.filter(
+      r => !remoteTitles.has(r.title.trim().toLowerCase()),
+    );
+
+    // Combine and ensure unique IDs
+    const seenIds = new Set<string>();
+    const merged: RecordItem[] = [];
+    for (const r of [...unSyncedLocal, ...remote]) {
+      if (!seenIds.has(r.id)) {
+        seenIds.add(r.id);
+        merged.push(r);
+      }
     }
-    return remote;
+
+    if (!filter && !search) {
+      await offlineStorage.saveRecords(patientId, kind, merged);
+    }
+
+    let list = merged;
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        r =>
+          r.title.toLowerCase().includes(s) ||
+          (r.description && r.description.toLowerCase().includes(s)),
+      );
+    }
+    if (filter && filter !== ALL) {
+      list = list.filter(r => r.kind === filter);
+    }
+    return list;
   } catch (e: any) {
     if (e?.status === 0 || !e?.status) {
       const cached = await offlineStorage.getRecords(patientId, kind);
       if (cached) {
-        let list = cached;
+        const seenIds = new Set<string>();
+        let list = cached.filter(r => {
+          if (seenIds.has(r.id)) return false;
+          seenIds.add(r.id);
+          return true;
+        });
         if (search) {
           const s = search.toLowerCase();
           list = list.filter(
@@ -160,8 +215,9 @@ async function cachedCreate(
           ? 'VoiceRecording'
           : 'Document',
       }));
+      const localId = `local_${kind}_${Date.now()}`;
       const localItem: RecordItem = {
-        id: `local_${kind}_${Date.now()}`,
+        id: localId,
         title: dto.title,
         description: dto.description,
         kind: dto.kind,
@@ -173,6 +229,7 @@ async function cachedCreate(
       await offlineStorage.enqueue({
         type: 'create_record',
         recordKind: kind,
+        recordId: localId,
         patientId,
         payload: dto,
         files,
@@ -212,7 +269,7 @@ async function cachedUpdate(
         payload: dto,
         files,
       });
-      return {
+      const updatedItem: RecordItem = {
         id,
         title: dto.title,
         description: dto.description,
@@ -220,6 +277,8 @@ async function cachedUpdate(
         date: dto.date || new Date().toISOString(),
         files: localFiles,
       };
+      await offlineStorage.updateRecordInCache(id, updatedItem);
+      return updatedItem;
     }
     throw e;
   }

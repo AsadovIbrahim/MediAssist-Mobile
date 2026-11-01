@@ -611,11 +611,13 @@ export function IconTile({
 export function Card({
   children,
   onPress,
+  onLongPress,
   className = '',
   style,
 }: {
   children: React.ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   className?: string;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -623,7 +625,8 @@ export function Card({
   return (
     <Pressable
       onPress={onPress}
-      disabled={!onPress}
+      onLongPress={onLongPress}
+      disabled={!onPress && !onLongPress}
       style={[
         {
           backgroundColor: colors.surface,
