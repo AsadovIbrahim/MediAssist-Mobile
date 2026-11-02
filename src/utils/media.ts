@@ -35,7 +35,7 @@ function assetToFile(a: Asset): LocalFile | null {
   };
 }
 
-export async function pickImages(limit = 5): Promise<LocalFile[]> {
+export async function pickImages(limit = 0): Promise<LocalFile[]> {
   const res = await launchImageLibrary({
     mediaType: 'photo',
     selectionLimit: limit,
