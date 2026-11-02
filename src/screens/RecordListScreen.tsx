@@ -205,8 +205,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         }
       }
 
-      setAutoSaveStatus('saved');
-      setTimeout(() => setAutoSaveStatus(null), 2000);
+      setAutoSaveStatus(null);
 
       if (!isLeaving) {
         setText('');
@@ -577,20 +576,12 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
               </View>
 
               <View className="flex-row items-center gap-2">
-                {autoSaveStatus && (
-                  <View className="flex-row items-center">
-                    {autoSaveStatus === 'saving' ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={colors.primary}
-                        style={{ transform: [{ scale: 0.7 }] }}
-                      />
-                    ) : (
-                      <Text className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        Yadda saxlanıldı ✓
-                      </Text>
-                    )}
-                  </View>
+                {autoSaveStatus === 'saving' && (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary}
+                    style={{ transform: [{ scale: 0.7 }] }}
+                  />
                 )}
 
                 {editingRecordId && (
