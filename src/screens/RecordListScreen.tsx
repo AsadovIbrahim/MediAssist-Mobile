@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Mic,
   Plus,
+  Save,
   Trash2,
   X,
 } from 'lucide-react-native';
@@ -570,7 +571,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                   className="text-[15px] font-bold"
                   numberOfLines={1}>
                   {editingRecordId
-                    ? `Düzəliş edilir: ${editingTitle}`
+                    ? cfg.singular
                     : `Yeni ${cfg.singular.toLowerCase()} yazın`}
                 </Text>
               </View>
@@ -585,15 +586,25 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                 )}
 
                 {editingRecordId && (
-                  <Pressable
-                    onPress={cancelEditing}
-                    hitSlop={8}
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                    className="rounded-lg border px-2.5 py-1 active:opacity-70">
-                    <Text style={{ color: colors.textMuted }} className="text-[12px] font-semibold">
-                      Ləğv et
-                    </Text>
-                  </Pressable>
+                  <>
+                    <Pressable
+                      onPress={cancelEditing}
+                      hitSlop={8}
+                      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                      className="rounded-lg border px-2.5 py-1 active:opacity-70">
+                      <Text style={{ color: colors.textMuted }} className="text-[12px] font-semibold">
+                        Ləğv et
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => saveCurrentInput(false)}
+                      hitSlop={8}
+                      style={{ backgroundColor: colors.primary }}
+                      className="h-7 w-7 items-center justify-center rounded-lg active:opacity-80 shadow-sm">
+                      <Save size={15} color="#FFFFFF" strokeWidth={2.2} />
+                    </Pressable>
+                  </>
                 )}
               </View>
             </View>
@@ -753,20 +764,16 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                 )}
               </View>
 
-              {/* Quick Commit button */}
-              {(text.trim().length > 0 || files.length > 0 || existingFiles.length > 0) && (
+              {/* Quick Commit button (only shown when adding a new record) */}
+              {!editingRecordId && (text.trim().length > 0 || files.length > 0) && (
                 <Pressable
                   onPress={() => saveCurrentInput(false)}
                   hitSlop={6}
                   style={{ backgroundColor: colors.primary }}
                   className="h-8.5 flex-row items-center rounded-xl px-3 active:opacity-80 shadow-sm">
-                  {editingRecordId ? (
-                    <Check size={14} color="#FFFFFF" strokeWidth={2.5} />
-                  ) : (
-                    <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
-                  )}
+                  <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
                   <Text className="ml-1 text-[12px] font-bold text-white">
-                    {editingRecordId ? 'Yenilə' : 'Əlavə et'}
+                    Əlavə et
                   </Text>
                 </Pressable>
               )}
