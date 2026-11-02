@@ -57,6 +57,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   // Editor states
   const [text, setText] = useState('');
   const [files, setFiles] = useState<LocalFile[]>([]);
+  const [existingFiles, setExistingFiles] = useState<FileItem[]>([]);
   const [date, setDate] = useState(() => new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showRecorder, setShowRecorder] = useState(false);
@@ -74,11 +75,18 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   textRef.current = text;
   const filesRef = useRef(files);
   filesRef.current = files;
+  const existingFilesRef = useRef(existingFiles);
+  existingFilesRef.current = existingFiles;
   const dateRef = useRef(date);
   dateRef.current = date;
   const editingRecordIdRef = useRef(editingRecordId);
   editingRecordIdRef.current = editingRecordId;
   const isSavingRef = useRef(false);
+  const initialEditStateRef = useRef<{
+    id: string;
+    text: string;
+    existingFilesCount: number;
+  } | null>(null);
 
   // Fetch existing records
   const {
@@ -102,9 +110,10 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   const saveCurrentInput = async (isLeaving = false): Promise<boolean> => {
     const trimmed = textRef.current.trim();
     const currentFiles = filesRef.current;
+    const currentExistingFiles = existingFilesRef.current;
 
     // Nothing to save
-    if (!trimmed && currentFiles.length === 0) {
+    if (!trimmed && currentFiles.length === 0 && currentExistingFiles.length === 0) {
       return true;
     }
     if (!patient) {
@@ -119,25 +128,34 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
 
     try {
       const firstLine = trimmed.split('\n')[0].trim();
+      const hasAudio =
+        currentFiles.some(f => f.kind === 'audio') ||
+        currentExistingFiles.some(f => f.type === 'VoiceRecording');
+      const hasImage =
+        currentFiles.some(f => f.kind === 'image') ||
+        currentExistingFiles.some(f => f.type === 'Image');
+      const hasDoc =
+        currentFiles.some(f => f.kind === 'document') ||
+        currentExistingFiles.some(f => f.type === 'Document');
+
       const finalTitle =
         firstLine.length > 0
           ? firstLine.length > 50
             ? `${firstLine.slice(0, 47)}...`
             : firstLine
-          : currentFiles.some(f => f.kind === 'audio')
+          : hasAudio
           ? `${cfg.singular} ${t('record.voiceSuffix')}`
-          : currentFiles.length > 0
+          : currentFiles.length > 0 || currentExistingFiles.length > 0
           ? `${cfg.singular} ${t('record.fileSuffix')}`
           : `${cfg.singular} ${t('record.recordSuffix')}`;
 
-      const targetKind =
-        currentFiles.some(f => f.kind === 'audio')
-          ? 'Voice'
-          : currentFiles.some(f => f.kind === 'image')
-          ? 'Image'
-          : currentFiles.some(f => f.kind === 'document')
-          ? 'Document'
-          : cfg.defaultKind;
+      const targetKind = hasAudio
+        ? 'Voice'
+        : hasImage
+        ? 'Image'
+        : hasDoc
+        ? 'Document'
+        : cfg.defaultKind;
 
       const isEditing = !!editingRecordIdRef.current;
       const targetId = editingRecordIdRef.current;
@@ -154,6 +172,17 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
           },
           currentFiles,
         );
+
+        // Upload newly selected files
+        if (!targetId.startsWith('local_') && currentFiles.length > 0) {
+          for (const file of currentFiles) {
+            try {
+              await cfg.api.upload(targetId, file);
+            } catch (err) {
+              console.warn('Failed to upload file for updated record:', err);
+            }
+          }
+        }
       } else {
         const created = await cfg.api.create(
           {
@@ -169,7 +198,9 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
           for (const file of currentFiles) {
             try {
               await cfg.api.upload(created.id, file);
-            } catch {}
+            } catch (err) {
+              console.warn('Failed to upload file for created record:', err);
+            }
           }
         }
       }
@@ -182,11 +213,14 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         textRef.current = '';
         setFiles([]);
         filesRef.current = [];
+        setExistingFiles([]);
+        existingFilesRef.current = [];
         setEditingRecordId(null);
         editingRecordIdRef.current = null;
         setEditingTitle('');
         setDate(new Date());
         dateRef.current = new Date();
+        initialEditStateRef.current = null;
       }
 
       await refreshPatients();
@@ -206,12 +240,32 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   // Auto-save on navigating back
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', e => {
+      if (isSavingRef.current) {
+        return;
+      }
+
       const trimmed = textRef.current.trim();
       const currentFiles = filesRef.current;
+      const isEditing = !!editingRecordIdRef.current;
 
-      // If nothing entered or already saving, let navigation happen
-      if ((!trimmed && currentFiles.length === 0) || isSavingRef.current) {
-        return;
+      if (!isEditing) {
+        // Creating new record: only save if user entered text or files
+        if (!trimmed && currentFiles.length === 0) {
+          return;
+        }
+      } else {
+        // Editing existing record: ONLY save if user made actual changes!
+        const init = initialEditStateRef.current;
+        const hasTextChanged = init ? trimmed !== init.text.trim() : false;
+        const hasNewFiles = currentFiles.length > 0;
+        const hasFilesRemoved = init
+          ? existingFilesRef.current.length !== init.existingFilesCount
+          : false;
+
+        if (!hasTextChanged && !hasNewFiles && !hasFilesRemoved) {
+          // No changes made! Don't re-save or overwrite anything.
+          return;
+        }
       }
 
       // Intercept navigation, save, and proceed
@@ -234,6 +288,37 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const removeExistingFile = (file: FileItem) => {
+    const recId = editingRecordIdRef.current;
+    if (!recId) return;
+
+    Alert.alert(
+      t('record.deleteFileTitle') || 'Faylı sil',
+      'Bu faylı silmək istədiyinizə əminsiniz?',
+      [
+        { text: t('common.cancel') || 'Ləğv et', style: 'cancel' },
+        {
+          text: t('common.delete') || 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!recId.startsWith('local_')) {
+                await cfg.api.removeFile(recId, file.id);
+              }
+              const next = existingFilesRef.current.filter(f => f.id !== file.id);
+              setExistingFiles(next);
+              existingFilesRef.current = next;
+              await refreshPatients();
+              await reload();
+            } catch (err: any) {
+              Alert.alert(t('common.error'), err?.message || 'Fayl silinmədi');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleSource = async (src: UploadSource) => {
     if (src === 'gallery') {
       appendFiles(await pickImages());
@@ -251,14 +336,23 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     setEditingRecordId(item.id);
     editingRecordIdRef.current = item.id;
     setEditingTitle(item.title);
-    setText(item.description ?? item.title ?? '');
-    textRef.current = item.description ?? item.title ?? '';
+    const initialDesc = item.description ?? item.title ?? '';
+    setText(initialDesc);
+    textRef.current = initialDesc;
     if (item.date) {
       setDate(new Date(item.date));
       dateRef.current = new Date(item.date);
     }
+    const currentItemFiles: FileItem[] = item.files ?? [];
+    setExistingFiles(currentItemFiles);
+    existingFilesRef.current = currentItemFiles;
     setFiles([]);
     filesRef.current = [];
+    initialEditStateRef.current = {
+      id: item.id,
+      text: initialDesc,
+      existingFilesCount: currentItemFiles.length,
+    };
   };
 
   const cancelEditing = () => {
@@ -269,8 +363,11 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     textRef.current = '';
     setFiles([]);
     filesRef.current = [];
+    setExistingFiles([]);
+    existingFilesRef.current = [];
     setDate(new Date());
     dateRef.current = new Date();
+    initialEditStateRef.current = null;
   };
 
   // Multi-select handlers
@@ -530,8 +627,37 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
             />
 
             {/* Attached Files Strip */}
-            {files.length > 0 && (
+            {(existingFiles.length > 0 || files.length > 0) && (
               <View className="my-2 flex-row flex-wrap gap-2">
+                {/* Existing uploaded files on record */}
+                {existingFiles.map(file => (
+                  <View
+                    key={file.id}
+                    style={{
+                      backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+                      borderColor: isDark ? '#334155' : '#CBD5E1',
+                    }}
+                    className="flex-row items-center rounded-xl border px-2.5 py-1.5">
+                    {file.type === 'Image' ? (
+                      <ImageIcon size={13} color={colors.primary} />
+                    ) : file.type === 'VoiceRecording' ? (
+                      <Mic size={13} color="#D97706" />
+                    ) : (
+                      <FileText size={13} color={colors.primary} />
+                    )}
+                    <Text
+                      style={{ color: colors.text }}
+                      className="mx-1.5 text-[12px] font-medium"
+                      numberOfLines={1}>
+                      {file.fileName}
+                    </Text>
+                    <Pressable onPress={() => removeExistingFile(file)} hitSlop={8}>
+                      <X size={14} color={colors.textMuted} />
+                    </Pressable>
+                  </View>
+                ))}
+
+                {/* Newly added files */}
                 {files.map((file, idx) => (
                   <View
                     key={idx}
@@ -540,9 +666,16 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                       borderColor: isDark ? '#334155' : '#BFDBFE',
                     }}
                     className="flex-row items-center rounded-xl border px-2.5 py-1.5">
+                    {file.kind === 'image' ? (
+                      <ImageIcon size={13} color={colors.primary} />
+                    ) : file.kind === 'audio' ? (
+                      <Mic size={13} color="#D97706" />
+                    ) : (
+                      <FileUp size={13} color={colors.primary} />
+                    )}
                     <Text
                       style={{ color: colors.text }}
-                      className="mr-2 text-[12px] font-medium"
+                      className="mx-1.5 text-[12px] font-medium"
                       numberOfLines={1}>
                       {file.name}
                     </Text>
@@ -630,13 +763,17 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
               </View>
 
               {/* Quick Commit button */}
-              {(text.trim().length > 0 || files.length > 0) && (
+              {(text.trim().length > 0 || files.length > 0 || existingFiles.length > 0) && (
                 <Pressable
                   onPress={() => saveCurrentInput(false)}
                   hitSlop={6}
                   style={{ backgroundColor: colors.primary }}
                   className="h-8.5 flex-row items-center rounded-xl px-3 active:opacity-80 shadow-sm">
-                  <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
+                  {editingRecordId ? (
+                    <Check size={14} color="#FFFFFF" strokeWidth={2.5} />
+                  ) : (
+                    <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
+                  )}
                   <Text className="ml-1 text-[12px] font-bold text-white">
                     {editingRecordId ? 'Yenilə' : 'Əlavə et'}
                   </Text>

@@ -269,13 +269,14 @@ async function cachedUpdate(
         payload: dto,
         files,
       });
+      const cached = await offlineStorage.findRecord(id);
       const updatedItem: RecordItem = {
         id,
         title: dto.title,
         description: dto.description,
         kind: dto.kind,
         date: dto.date || new Date().toISOString(),
-        files: localFiles,
+        files: [...(cached?.files || []), ...localFiles],
       };
       await offlineStorage.updateRecordInCache(id, updatedItem);
       return updatedItem;
