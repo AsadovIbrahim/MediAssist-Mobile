@@ -1,8 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -11,17 +10,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  AlertCircle,
   Brain,
-  Check,
-  Eye,
-  EyeOff,
   FileText,
   Pill,
   RotateCcw,
   Send,
-  Server,
-  Settings,
   Sparkles,
   Stethoscope,
 } from 'lucide-react-native';
@@ -33,13 +26,8 @@ import { RECORDS, type RecordItem } from '../features/records';
 import { appointmentsApi } from '../api/services';
 import type { Appointment } from '../api/types';
 import {
-  askAi,
-  getAiConfig,
-  getDefaultOllamaUrl,
-  saveAiConfig,
+  runLocalClinicalEngine,
   type AiChatMessage,
-  type AiConfig,
-  type AiProvider,
   type AiRecordItem,
 } from '../api/ai';
 import { formatDate } from '../utils/format';
@@ -55,24 +43,8 @@ export function AiScreen() {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [aiConfig, setAiConfig] = useState<AiConfig>({
-    provider: 'hybrid',
-    geminiApiKey: '',
-    geminiModel: 'gemini-1.5-flash',
-    ollamaUrl: getDefaultOllamaUrl(),
-    ollamaModel: 'llama3.2',
-  });
 
   const scrollRef = useRef<ScrollNode>(null);
-
-  // Load persistent AI configuration on mount
-  useEffect(() => {
-    (async () => {
-      const cfg = await getAiConfig();
-      setAiConfig(cfg);
-    })();
-  }, []);
 
   // Fetch patient records and appointments
   const { data, loading } = useFocusData(async () => {
@@ -91,10 +63,10 @@ export function AiScreen() {
   const scrollToBottom = () => {
     setTimeout(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
-    }, 150);
+    }, 120);
   };
 
-  const handleSend = async (customPrompt?: string) => {
+  const handleSend = (customPrompt?: string) => {
     const promptText = (customPrompt ?? question).trim();
     if (!promptText || thinking) {
       return;
@@ -107,8 +79,7 @@ export function AiScreen() {
       timestamp: Date.now(),
     };
 
-    const newHistory = [...messages, userMsg];
-    setMessages(newHistory);
+    setMessages(prev => [...prev, userMsg]);
     setQuestion('');
     setThinking(true);
     scrollToBottom();
@@ -118,7 +89,6 @@ export function AiScreen() {
     const treatments: RecordItem[] = data?.treatments ?? [];
     const appointments: Appointment[] = data?.appointments ?? [];
 
-    // Convert loaded records into standard AI context items
     const recordsPayload: AiRecordItem[] = [
       ...complaints.map(c => ({
         id: c.id,
@@ -154,62 +124,35 @@ export function AiScreen() {
       })),
     ];
 
-    try {
-      const response = await askAi({
-        patient: patient
-          ? {
-              id: patient.id,
-              name: patientFullName(patient),
-              age: patient.age,
-              phone: patient.phone,
-              note: patient.note,
-            }
-          : null,
-        records: recordsPayload,
-        history: messages,
-        question: promptText,
-      });
+    // Execute internal clinical intelligence
+    const clinicalSummary = runLocalClinicalEngine(
+      patient
+        ? {
+            id: patient.id,
+            name: patientFullName(patient),
+            age: patient.age,
+            phone: patient.phone,
+            note: patient.note,
+          }
+        : null,
+      recordsPayload,
+      promptText,
+    );
 
+    // Quick natural transition for UX
+    setTimeout(() => {
       const aiMsg: AiChatMessage = {
         id: `${Date.now()}-ai`,
         role: 'ai',
-        text: response.text,
-        provider: response.provider,
-        model: response.model,
-        timestamp: Date.now(),
-      };
-
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (err: any) {
-      const errorText =
-        err?.message || 'AI ilə əlaqə zamanı gözlənilməz xəta baş verdi.';
-
-      const isKeyMissing = errorText.includes('GEMINI_KEY_MISSING');
-      const isConnectionIssue =
-        errorText.includes('Ollama serverinə') || errorText.includes('Ollama xətası');
-
-      let userFriendlyText = `⚠️ **Xəta baş verdi:**\n\n${errorText}`;
-      if (isKeyMissing) {
-        userFriendlyText =
-          '🔑 **Google Gemini API açarı daxil edilməyib.**\n\nYuxarıdakı **Tənzimləmələr** düyməsinə toxunaraq Google AI Studio-dan pulsuz API açarınızı daxil edin və ya **Öz Modelimiz (Ollama)** rejimini seçin.';
-      } else if (isConnectionIssue) {
-        userFriendlyText =
-          '🖥️ **Ollama serverinə qoşulmaq olmadı.**\n\nKompüterinizdə Ollama proqramının işlədiyinə və URL ünvanının (məsələn, eyni Wi-Fi üçün kompyuterinizin IP-si) düzgün qeyd olunduğuna əmin olun.';
-      }
-
-      const errorMsg: AiChatMessage = {
-        id: `${Date.now()}-err`,
-        role: 'ai',
-        text: userFriendlyText,
+        text: clinicalSummary,
         provider: 'offline',
-        model: 'Sistem Xətası',
+        model: 'MediAssist AI',
         timestamp: Date.now(),
       };
-      setMessages(prev => [...prev, errorMsg]);
-    } finally {
+      setMessages(prev => [...prev, aiMsg]);
       setThinking(false);
       scrollToBottom();
-    }
+    }, 250);
   };
 
   const handleClearChat = () => {
@@ -227,53 +170,20 @@ export function AiScreen() {
     );
   };
 
-  const activeProviderLabel =
-    aiConfig.provider === 'hybrid'
-      ? 'Hibrid AI'
-      : aiConfig.provider === 'offline'
-      ? 'Daxili AI'
-      : aiConfig.provider === 'ollama'
-      ? `Ollama (${aiConfig.ollamaModel})`
-      : 'Gemini 1.5';
-
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScreenHeader
         title={t('ai.screenTitle')}
         right={
-          <View className="flex-row items-center gap-1.5">
-            {messages.length > 0 && (
-              <Pressable
-                onPress={handleClearChat}
-                hitSlop={10}
-                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                className="h-10 w-10 items-center justify-center rounded-2xl border active:opacity-70 shadow-sm">
-                <RotateCcw size={18} color={colors.textMuted} />
-              </Pressable>
-            )}
+          messages.length > 0 ? (
             <Pressable
-              onPress={() => setSettingsOpen(true)}
+              onPress={handleClearChat}
               hitSlop={10}
               style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-              className="h-10 flex-row items-center rounded-2xl border px-3 active:opacity-70 shadow-sm">
-              {aiConfig.provider === 'hybrid' ? (
-                <Sparkles size={16} color={colors.primary} />
-              ) : aiConfig.provider === 'offline' ? (
-                <Brain size={16} color="#8B5CF6" />
-              ) : aiConfig.provider === 'ollama' ? (
-                <Server size={16} color="#10B981" />
-              ) : (
-                <Sparkles size={16} color={colors.primary} />
-              )}
-              <Text
-                style={{ color: colors.text }}
-                className="ml-1.5 text-xs font-semibold"
-                numberOfLines={1}>
-                {activeProviderLabel}
-              </Text>
-              <Settings size={14} color={colors.textMuted} className="ml-1.5" />
+              className="h-10 w-10 items-center justify-center rounded-2xl border active:opacity-70 shadow-sm">
+              <RotateCcw size={18} color={colors.textMuted} />
             </Pressable>
-          </View>
+          ) : undefined
         }
       />
 
@@ -291,18 +201,9 @@ export function AiScreen() {
               <View className="flex-row items-center">
                 <IconTile icon={Brain} tint="purple" size={48} variant="tile" />
                 <View className="ml-3 flex-1">
-                  <View className="flex-row items-center">
-                    <Text style={{ color: colors.text }} className="text-base font-bold">
-                      {t('ai.cardTitle')}
-                    </Text>
-                    <View
-                      style={{ backgroundColor: colors.primarySoft }}
-                      className="ml-2 rounded-full px-2 py-0.5">
-                      <Text style={{ color: colors.primary }} className="text-[10px] font-bold">
-                        100% PULSUZ AI
-                      </Text>
-                    </View>
-                  </View>
+                  <Text style={{ color: colors.text }} className="text-base font-bold">
+                    {t('ai.cardTitle')}
+                  </Text>
                   <Text style={{ color: colors.textMuted }} className="mt-0.5 text-xs">
                     {patientFullName(patient) || t('ai.notSelected')}
                   </Text>
@@ -383,22 +284,13 @@ export function AiScreen() {
                 }
                 className="mb-3 max-w-[92%] rounded-2xl p-4 shadow-sm">
                 {m.role === 'ai' && (
-                  <View className="mb-2 flex-row items-center justify-between border-b pb-2" style={{ borderBottomColor: colors.border }}>
-                    <View className="flex-row items-center">
-                      <Sparkles size={14} color={colors.primary} />
-                      <Text style={{ color: colors.primary }} className="ml-1.5 text-xs font-bold">
-                        MediAssist AI
-                      </Text>
-                    </View>
-                    {m.model && (
-                      <View
-                        style={{ backgroundColor: colors.field }}
-                        className="rounded-full px-2 py-0.5">
-                        <Text style={{ color: colors.textMuted }} className="text-[10px] font-medium">
-                          {m.model}
-                        </Text>
-                      </View>
-                    )}
+                  <View
+                    className="mb-2 flex-row items-center border-b pb-2"
+                    style={{ borderBottomColor: colors.border }}>
+                    <Sparkles size={14} color={colors.primary} />
+                    <Text style={{ color: colors.primary }} className="ml-1.5 text-xs font-bold">
+                      MediAssist AI
+                    </Text>
                   </View>
                 )}
 
@@ -465,17 +357,6 @@ export function AiScreen() {
           </Pressable>
         </View>
       </KeyboardLiftView>
-
-      {/* AI Settings Modal */}
-      <AiSettingsModal
-        visible={settingsOpen}
-        config={aiConfig}
-        onClose={() => setSettingsOpen(false)}
-        onSave={updated => {
-          setAiConfig(updated);
-          setSettingsOpen(false);
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -588,321 +469,5 @@ function SummarySection({
         </View>
       ))}
     </Card>
-  );
-}
-
-/**
- * AI Configuration Modal
- * Lets the doctor choose between Google Gemini (Free Tier) or Ollama (Self-Hosted Model),
- * set the API Key or Host URL, with zero recurring costs.
- */
-function AiSettingsModal({
-  visible,
-  config,
-  onClose,
-  onSave,
-}: {
-  visible: boolean;
-  config: AiConfig;
-  onClose: () => void;
-  onSave: (updated: AiConfig) => void;
-}) {
-  const { colors } = useTheme();
-  const [provider, setProvider] = useState<AiProvider>(config.provider);
-  const [geminiKey, setGeminiKey] = useState(config.geminiApiKey);
-  const [geminiModel, setGeminiModel] = useState(config.geminiModel);
-  const [ollamaUrl, setOllamaUrl] = useState(config.ollamaUrl);
-  const [ollamaModel, setOllamaModel] = useState(config.ollamaModel);
-  const [showKey, setShowKey] = useState(false);
-
-  useEffect(() => {
-    setProvider(config.provider);
-    setGeminiKey(config.geminiApiKey);
-    setGeminiModel(config.geminiModel);
-    setOllamaUrl(config.ollamaUrl);
-    setOllamaModel(config.ollamaModel);
-  }, [config, visible]);
-
-  const handleSave = async () => {
-    const updated = await saveAiConfig({
-      provider,
-      geminiApiKey: geminiKey.trim(),
-      geminiModel: geminiModel.trim(),
-      ollamaUrl: ollamaUrl.trim(),
-      ollamaModel: ollamaModel.trim(),
-    });
-    onSave(updated);
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}>
-      <View className="flex-1 items-center justify-center bg-black/60 px-4">
-        <View
-          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          className="w-full max-w-lg rounded-3xl border p-5 shadow-2xl">
-          {/* Header */}
-          <View className="flex-row items-center justify-between pb-3">
-            <View className="flex-row items-center">
-              <View
-                style={{ backgroundColor: colors.primarySoft }}
-                className="h-9 w-9 items-center justify-center rounded-xl">
-                <Sparkles size={18} color={colors.primary} />
-              </View>
-              <View className="ml-2.5">
-                <Text style={{ color: colors.text }} className="text-base font-bold">
-                  AI Model Tənzimləmələri
-                </Text>
-                <Text style={{ color: colors.textMuted }} className="text-xs">
-                  Pulsuz və ya Şəxsi Model seçimi
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <ScrollView className="max-h-[460px] pt-1">
-            {/* Provider Selection Tabs */}
-            <Text style={{ color: colors.textMuted }} className="mb-2 text-xs font-bold uppercase tracking-wider">
-              AI Mühərriki
-            </Text>
-            <View className="mb-4 flex-row flex-wrap gap-2">
-              {[
-                { id: 'hybrid' as const, label: 'Hibrid AI', sub: 'Online + Oflayn', icon: Sparkles },
-                { id: 'offline' as const, label: 'Daxili Analiz', sub: 'İnternetsiz', icon: Brain },
-                { id: 'ollama' as const, label: 'Lokal Ollama', sub: 'Kompüterdə', icon: Server },
-                { id: 'gemini' as const, label: 'Google Gemini', sub: '100% Pulsuz', icon: Sparkles },
-              ].map(opt => {
-                const isSelected = provider === opt.id;
-                const IconComp = opt.icon;
-                return (
-                  <Pressable
-                    key={opt.id}
-                    onPress={() => setProvider(opt.id)}
-                    style={{
-                      backgroundColor: isSelected ? colors.primarySoft : colors.field,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                      width: '48%',
-                    }}
-                    className="items-center rounded-2xl border p-2.5 active:opacity-75">
-                    <IconComp
-                      size={18}
-                      color={isSelected ? colors.primary : colors.textMuted}
-                    />
-                    <Text
-                      style={{ color: isSelected ? colors.primary : colors.text }}
-                      className="mt-1 text-center text-xs font-bold">
-                      {opt.label}
-                    </Text>
-                    <Text
-                      style={{ color: isSelected ? colors.primary : colors.textMuted }}
-                      className="text-[10px]">
-                      {opt.sub}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Provider: Hybrid (Recommended Default) */}
-            {provider === 'hybrid' && (
-              <View
-                style={{ backgroundColor: colors.field }}
-                className="rounded-2xl p-4">
-                <View className="flex-row items-center">
-                  <Sparkles size={18} color={colors.primary} />
-                  <Text style={{ color: colors.text }} className="ml-2 text-sm font-bold">
-                    Hibrid AI Rejimi (Tövsiyə olunur)
-                  </Text>
-                </View>
-                <Text style={{ color: colors.textMuted }} className="mt-2 text-xs leading-5">
-                  Tətbiq internet olduqda mərkəzi serverimizdəki modeldən cavab alır. İnternet kəsildikdə və ya zəif olduqda isə avtomatik olaraq daxili oflayn modelə keçir. Həkimin heç bir IP və ya xüsusi açar daxil etməsinə ehtiyac yoxdur.
-                </Text>
-              </View>
-            )}
-
-            {/* Provider: Google Gemini */}
-            {provider === 'gemini' && (
-              <View className="space-y-3">
-                <View
-                  style={{ backgroundColor: colors.field }}
-                  className="rounded-2xl p-3">
-                  <View className="flex-row items-center">
-                    <AlertCircle size={15} color={colors.primary} />
-                    <Text style={{ color: colors.text }} className="ml-1.5 text-xs font-bold">
-                      Google AI Studio Free Tier
-                    </Text>
-                  </View>
-                  <Text style={{ color: colors.textMuted }} className="mt-1 text-xs leading-4">
-                    Google Gemini 1.5 Flash gündə 1,500 sorğuya qədər tamamilə pulsuzdur. Bank kartı tələb olunmur.
-                  </Text>
-                </View>
-
-                <View>
-                  <Text style={{ color: colors.text }} className="mb-1 text-xs font-semibold">
-                    Gemini API Açarınız:
-                  </Text>
-                  <View
-                    style={{ backgroundColor: colors.field, borderColor: colors.border }}
-                    className="flex-row items-center rounded-xl border px-3">
-                    <TextInput
-                      value={geminiKey}
-                      onChangeText={setGeminiKey}
-                      placeholder="AIzaSy..."
-                      placeholderTextColor={colors.textLight}
-                      secureTextEntry={!showKey}
-                      style={{ color: colors.text }}
-                      className="flex-1 py-2 text-sm"
-                    />
-                    <Pressable onPress={() => setShowKey(!showKey)} hitSlop={10}>
-                      {showKey ? (
-                        <EyeOff size={16} color={colors.textMuted} />
-                      ) : (
-                        <Eye size={16} color={colors.textMuted} />
-                      )}
-                    </Pressable>
-                  </View>
-                  <Text style={{ color: colors.textLight }} className="mt-1 text-[11px]">
-                    Açarı aistudio.google.com/app/apikey səhifəsindən ala bilərsiniz.
-                  </Text>
-                </View>
-
-                <View>
-                  <Text style={{ color: colors.text }} className="mb-1 text-xs font-semibold">
-                    Model:
-                  </Text>
-                  <View className="flex-row gap-2">
-                    {['gemini-1.5-flash', 'gemini-2.0-flash'].map(m => (
-                      <Pressable
-                        key={m}
-                        onPress={() => setGeminiModel(m)}
-                        style={{
-                          backgroundColor:
-                            geminiModel === m ? colors.primarySoft : colors.field,
-                          borderColor:
-                            geminiModel === m ? colors.primary : colors.border,
-                        }}
-                        className="flex-1 rounded-xl border py-2 active:opacity-75">
-                        <Text
-                          style={{
-                            color:
-                              geminiModel === m ? colors.primary : colors.text,
-                          }}
-                          className="text-center text-xs font-semibold">
-                          {m}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Provider: Ollama / Self-Hosted */}
-            {provider === 'ollama' && (
-              <View className="space-y-3">
-                <View
-                  style={{ backgroundColor: colors.field }}
-                  className="rounded-2xl p-3">
-                  <View className="flex-row items-center">
-                    <Server size={15} color="#10B981" />
-                    <Text style={{ color: colors.text }} className="ml-1.5 text-xs font-bold">
-                      Öz Modeliniz (Lokal / Şəxsi Server)
-                    </Text>
-                  </View>
-                  <Text style={{ color: colors.textMuted }} className="mt-1 text-xs leading-4">
-                    Kompüterinizdə Ollama (Llama 3.2, Mistral, DeepSeek) quraşdırıb heç bir üçüncü tərəfə məlumat ötürmədən tam oflayn və pulsuz istifadə edə bilərsiniz.
-                  </Text>
-                </View>
-
-                <View>
-                  <Text style={{ color: colors.text }} className="mb-1 text-xs font-semibold">
-                    Ollama Server URL:
-                  </Text>
-                  <TextInput
-                    value={ollamaUrl}
-                    onChangeText={setOllamaUrl}
-                    placeholder="http://192.168.1.100:11434"
-                    placeholderTextColor={colors.textLight}
-                    style={{ backgroundColor: colors.field, borderColor: colors.border, color: colors.text }}
-                    className="rounded-xl border px-3 py-2 text-sm"
-                  />
-                  <Text style={{ color: colors.textLight }} className="mt-1 text-[11px]">
-                    Android Emulator üçün: http://10.0.2.2:11434, Wi-Fi üçün kompüterinizin yerli IP-si.
-                  </Text>
-                </View>
-
-                <View>
-                  <Text style={{ color: colors.text }} className="mb-1 text-xs font-semibold">
-                    Model Adı:
-                  </Text>
-                  <TextInput
-                    value={ollamaModel}
-                    onChangeText={setOllamaModel}
-                    placeholder="llama3.2"
-                    placeholderTextColor={colors.textLight}
-                    style={{ backgroundColor: colors.field, borderColor: colors.border, color: colors.text }}
-                    className="rounded-xl border px-3 py-2 text-sm"
-                  />
-                  <View className="mt-1.5 flex-row gap-1.5">
-                    {['llama3.2', 'mistral', 'qwen2.5'].map(name => (
-                      <Pressable
-                        key={name}
-                        onPress={() => setOllamaModel(name)}
-                        style={{ backgroundColor: colors.field }}
-                        className="rounded-lg px-2.5 py-1">
-                        <Text style={{ color: colors.primary }} className="text-[11px] font-semibold">
-                          {name}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Provider: Offline / Built-in Clinical Analyzer */}
-            {provider === 'offline' && (
-              <View
-                style={{ backgroundColor: colors.field }}
-                className="rounded-2xl p-4">
-                <View className="flex-row items-center">
-                  <Brain size={18} color="#8B5CF6" />
-                  <Text style={{ color: colors.text }} className="ml-2 text-sm font-bold">
-                    Daxili Kliniki Analizator
-                  </Text>
-                </View>
-                <Text style={{ color: colors.textMuted }} className="mt-2 text-xs leading-5">
-                  Heç bir internet bağlantısı, API açarı və ya server tələb olunmur. Pasiyentin şikayətlərini, diaqnozlarını və dərmanlarını daxili tibbi qaydalar sistemi ilə dərhal təhlil edir.
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Actions */}
-          <View className="mt-4 flex-row gap-2 border-t pt-3" style={{ borderTopColor: colors.border }}>
-            <Pressable
-              onPress={onClose}
-              style={{ backgroundColor: colors.field }}
-              className="flex-1 items-center justify-center rounded-xl py-3 active:opacity-75">
-              <Text style={{ color: colors.textMuted }} className="text-sm font-semibold">
-                Ləğv et
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={handleSave}
-              style={{ backgroundColor: colors.primary }}
-              className="flex-1 flex-row items-center justify-center rounded-xl py-3 active:opacity-85 shadow-md">
-              <Check size={16} color="#fff" />
-              <Text className="ml-1.5 text-sm font-bold text-white">
-                Yadda saxla
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }
