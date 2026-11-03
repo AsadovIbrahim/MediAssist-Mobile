@@ -57,7 +57,7 @@ export function AiScreen() {
   const [thinking, setThinking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiConfig, setAiConfig] = useState<AiConfig>({
-    provider: 'gemini',
+    provider: 'offline',
     geminiApiKey: '',
     geminiModel: 'gemini-1.5-flash',
     ollamaUrl: getDefaultOllamaUrl(),

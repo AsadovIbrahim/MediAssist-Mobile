@@ -82,17 +82,22 @@ export async function getAiConfig(): Promise<AiConfig> {
       ]);
 
     const envKey = (ENV as any)?.GEMINI_API_KEY || '';
+    const resolvedKey = geminiKey || envKey || '';
+
+    // Default to 'offline' if user has never selected a provider and has no key
+    const resolvedProvider: AiProvider =
+      (provider as AiProvider) || (resolvedKey ? 'gemini' : 'offline');
 
     return {
-      provider: (provider as AiProvider) || (geminiKey || envKey ? 'gemini' : 'gemini'),
-      geminiApiKey: geminiKey || envKey || '',
+      provider: resolvedProvider,
+      geminiApiKey: resolvedKey,
       geminiModel: geminiModel || DEFAULT_GEMINI_MODEL,
       ollamaUrl: ollamaUrl || getDefaultOllamaUrl(),
       ollamaModel: ollamaModel || DEFAULT_OLLAMA_MODEL,
     };
   } catch {
     return {
-      provider: 'gemini',
+      provider: 'offline',
       geminiApiKey: (ENV as any)?.GEMINI_API_KEY || '',
       geminiModel: DEFAULT_GEMINI_MODEL,
       ollamaUrl: getDefaultOllamaUrl(),
@@ -456,18 +461,25 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
           model: activeConfig.geminiModel,
         };
       } catch (err: any) {
-        // If Gemini failed due to quota or invalid key, return error with context
-        throw err;
+        const localSummary = runLocalClinicalEngine(
+          options.patient,
+          options.records,
+          options.question,
+        );
+        return {
+          text: `⚠️ **Gemini ilə əlaqə xətası:** ${err?.message || 'Serverə qoşulmaq olmadı.'}\n\n*Məlumat daxili kliniki analizator tərəfindən hazırlandı:*\n\n---\n\n${localSummary}`,
+          provider: 'offline',
+          model: 'Daxili Analizator (Ehtiyat)',
+        };
       }
     } else {
-      // No key provided yet, return smart local engine but suggest entering key
       const localSummary = runLocalClinicalEngine(
         options.patient,
         options.records,
         options.question,
       );
       return {
-        text: `${localSummary}\n\n*(Məlumat daxili kliniki analizator tərəfindən hazırlandı. Yuxarıdakı tənzimləmə düyməsindən pulsuz Google Gemini API açarı daxil edərək daha geniş generativ AI imkanlarını aktivləşdirə bilərsiniz).*`,
+        text: `${localSummary}\n\n*(Məlumat daxili kliniki analizator tərəfindən hazırlandı. Yuxarıdakı tənzimləmələrdən pulsuz Google Gemini API açarı daxil edərək generativ AI rejimini aktivləşdirə bilərsiniz).*`,
         provider: 'offline',
         model: 'Daxili Analizator',
       };
@@ -476,17 +488,30 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
 
   // 2. Ollama / Self-Hosted Model ("Öz Modelimiz")
   if (activeConfig.provider === 'ollama') {
-    const text = await callOllama(
-      activeConfig.ollamaUrl,
-      activeConfig.ollamaModel,
-      clinicalPrompt,
-      options.history,
-    );
-    return {
-      text,
-      provider: 'ollama',
-      model: activeConfig.ollamaModel,
-    };
+    try {
+      const text = await callOllama(
+        activeConfig.ollamaUrl,
+        activeConfig.ollamaModel,
+        clinicalPrompt,
+        options.history,
+      );
+      return {
+        text,
+        provider: 'ollama',
+        model: activeConfig.ollamaModel,
+      };
+    } catch (err: any) {
+      const localSummary = runLocalClinicalEngine(
+        options.patient,
+        options.records,
+        options.question,
+      );
+      return {
+        text: `🖥️ **Ollama serverinə qoşulmaq olmadı** (${activeConfig.ollamaUrl}).\n\n*Kompüterinizdə Ollama işləyənə qədər cavab daxili kliniki analizator tərəfindən təqdim edilir:*\n\n---\n\n${localSummary}`,
+        provider: 'offline',
+        model: 'Daxili Analizator (Ehtiyat)',
+      };
+    }
   }
 
   // 3. Offline Smart Engine
