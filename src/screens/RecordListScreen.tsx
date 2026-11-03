@@ -723,10 +723,39 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
       {/* Persistent Quick Input Composer Card (OUTSIDE FlatList to guarantee uninterrupted focus!) */}
       {!selectionMode && (
         <View className="px-4">
-          <Card className="mb-3 p-4 shadow-sm">
-            {/* Header Row of Composer */}
-            <View className="mb-2 flex-row items-center justify-end">
-              <View className="flex-row items-center gap-2">
+          <Card className="mb-3 p-3.5 shadow-sm">
+            {/* Input Area with Integrated Top-Right Action Controls */}
+            <View className="relative">
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder={
+                  cfg.descriptionPlaceholder ||
+                  `${cfg.singular} haqqında qeydləri bura yazın...`
+                }
+                placeholderTextColor={colors.textLight}
+                multiline
+                scrollEnabled={true}
+                style={{
+                  minHeight: 75,
+                  maxHeight: 180,
+                  color: colors.text,
+                  textAlignVertical: 'top',
+                  paddingTop: 2,
+                  paddingBottom: 4,
+                  paddingLeft: 0,
+                  paddingRight:
+                    text.trim().length > 0 ||
+                    files.length > 0 ||
+                    isEditingHistoryItem
+                      ? 42
+                      : 4,
+                }}
+                className="text-[15px] leading-6"
+              />
+
+              {/* Floating top-right action buttons */}
+              <View className="absolute top-0 right-0 flex-row items-center gap-2">
                 {autoSaveStatus === 'saving' && (
                   <ActivityIndicator
                     size="small"
@@ -761,26 +790,6 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                 )}
               </View>
             </View>
-
-            {/* Text Input Area */}
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder={
-                cfg.descriptionPlaceholder ||
-                `${cfg.singular} haqqında qeydləri bura yazın...`
-              }
-              placeholderTextColor={colors.textLight}
-              multiline
-              scrollEnabled={true}
-              style={{
-                minHeight: 85,
-                maxHeight: 180,
-                color: colors.text,
-                textAlignVertical: 'top',
-              }}
-              className="py-1 text-[15px] leading-6"
-            />
 
             {/* Attached Files Strip */}
             {((isEditingHistoryItem && existingFiles.length > 0) || files.length > 0) && (
