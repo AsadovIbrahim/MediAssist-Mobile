@@ -1,8 +1,9 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { http } from './client';
 import { ENV } from './../env.local';
 
-export type AiProvider = 'gemini' | 'ollama' | 'offline';
+export type AiProvider = 'hybrid' | 'offline' | 'ollama' | 'gemini';
 
 export interface AiConfig {
   provider: AiProvider;
@@ -84,9 +85,9 @@ export async function getAiConfig(): Promise<AiConfig> {
     const envKey = (ENV as any)?.GEMINI_API_KEY || '';
     const resolvedKey = geminiKey || envKey || '';
 
-    // Default to 'offline' if user has never selected a provider and has no key
+    // Default to 'hybrid' for seamless online + offline experience
     const resolvedProvider: AiProvider =
-      (provider as AiProvider) || (resolvedKey ? 'gemini' : 'offline');
+      (provider as AiProvider) || 'hybrid';
 
     return {
       provider: resolvedProvider,
@@ -97,7 +98,7 @@ export async function getAiConfig(): Promise<AiConfig> {
     };
   } catch {
     return {
-      provider: 'offline',
+      provider: 'hybrid',
       geminiApiKey: (ENV as any)?.GEMINI_API_KEY || '',
       geminiModel: DEFAULT_GEMINI_MODEL,
       ollamaUrl: getDefaultOllamaUrl(),
@@ -200,6 +201,27 @@ function buildClinicalPrompt(
   return lines.join('\n');
 }
 
+/**
+ * Calls our Central MediAssist Server Endpoint (when online)
+ */
+async function callServerAi(options: AskAiOptions): Promise<{ text: string; model?: string }> {
+  const payload = {
+    patient: options.patient,
+    records: options.records,
+    history: options.history.slice(-4).map(h => ({ role: h.role, text: h.text })),
+    question: options.question,
+  };
+
+  const res = await http.post<{ text: string; model?: string; provider?: string }>('ai/ask', payload);
+  if (!res?.text) {
+    throw new Error('Server cavab qaytarmadı.');
+  }
+  return {
+    text: res.text,
+    model: res.model || 'MediAssist AI (Server)',
+  };
+}
+
 async function callGemini(
   apiKey: string,
   modelName: string,
@@ -210,8 +232,6 @@ async function callGemini(
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
 
   const contents: any[] = [];
-
-  // Pass last 4 turns of history for dialogue continuity
   const recentHistory = history.slice(-4);
   for (const h of recentHistory) {
     contents.push({
@@ -276,7 +296,6 @@ async function callOllama(
   const endpoint = `${cleanUrl}/api/chat`;
 
   const messages: any[] = [{ role: 'system', content: SYSTEM_INSTRUCTION }];
-
   const recentHistory = history.slice(-4);
   for (const h of recentHistory) {
     messages.push({
@@ -330,8 +349,7 @@ async function callOllama(
 
 /**
  * Smart Local Clinical Rule Engine
- * Runs 100% offline with zero network dependency.
- * Formats high-quality medical summaries in Azerbaijani based on records.
+ * Runs 100% offline on the mobile device with zero network dependency.
  */
 export function runLocalClinicalEngine(
   patient: AiPatientContext | null,
@@ -365,7 +383,7 @@ export function runLocalClinicalEngine(
       )
       .join('\n\n');
 
-    return `🩺 **Pasiyentin Şikayətlər Xülasəsi:**\n\n${list}\n\n💡 **AI Kliniki Qeyd:** Şikayətlərin inkişaf dinamikasını izləmək və diaqnozla uyğunluğunu yoxlamaq tövsiyə olunur.`;
+    return `🩺 **Pasiyentin Şikayətlər Xülasəsi:**\n\n${list}\n\n💡 **Kliniki Qeyd:** Şikayətlərin inkişaf dinamikasını izləmək və diaqnozla uyğunluğunu yoxlamaq tövsiyə olunur.`;
   }
 
   if (isTreatmentQuery) {
@@ -379,7 +397,7 @@ export function runLocalClinicalEngine(
       )
       .join('\n\n');
 
-    return `💊 **Aktiv Müalicə və Təyinat Planı:**\n\n${list}\n\n⚠️ **AI Tövsiyəsi:** Dərmanların qəbul rejimini və mümkün yanaşı təsirlərini pasiyentlə dəqiqləşdirmək faydalı olar.`;
+    return `💊 **Aktiv Müalicə və Təyinat Planı:**\n\n${list}\n\n⚠️ **Tövsiyə:** Dərmanların qəbul rejimini və mümkün yanaşı təsirlərini pasiyentlə dəqiqləşdirmək faydalı olar.`;
   }
 
   if (isDiagnosisQuery) {
@@ -393,7 +411,7 @@ export function runLocalClinicalEngine(
       )
       .join('\n\n');
 
-    return `🔬 **Təsdiqlənmiş Diaqnoz Nəticələri:**\n\n${list}\n\n📌 **AI Müşahidəsi:** Diaqnozun dinamikası və müalicəyə cavab reaksiyası nəzarətdə saxlanılmalıdır.`;
+    return `🔬 **Təsdiqlənmiş Diaqnoz Nəticələri:**\n\n${list}\n\n📌 **Müşahidə:** Diaqnozun dinamikası və müalicəyə cavab reaksiyası nəzarətdə saxlanılmalıdır.`;
   }
 
   if (isCalendarQuery) {
@@ -439,13 +457,51 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
   const config = await getAiConfig();
   const activeConfig: AiConfig = { ...config, ...options.configOverride };
 
+  // 1. HYBRID (Standard Mode: Online Server Model, falls back automatically to Offline)
+  if (activeConfig.provider === 'hybrid') {
+    try {
+      const serverRes = await callServerAi(options);
+      return {
+        text: serverRes.text,
+        provider: 'hybrid',
+        model: serverRes.model || 'MediAssist AI (Online)',
+      };
+    } catch {
+      // Automatic and instant fallback to offline clinical engine
+      const localText = runLocalClinicalEngine(
+        options.patient,
+        options.records,
+        options.question,
+      );
+      return {
+        text: localText,
+        provider: 'offline',
+        model: 'MediAssist AI (Oflayn)',
+      };
+    }
+  }
+
+  // 2. OFFLINE ONLY (100% on device)
+  if (activeConfig.provider === 'offline') {
+    const localText = runLocalClinicalEngine(
+      options.patient,
+      options.records,
+      options.question,
+    );
+    return {
+      text: localText,
+      provider: 'offline',
+      model: 'MediAssist AI (Oflayn)',
+    };
+  }
+
   const clinicalPrompt = buildClinicalPrompt(
     options.patient,
     options.records,
     options.question,
   );
 
-  // 1. Google Gemini (Pulsuz Free Tier API)
+  // 3. GOOGLE GEMINI (Cloud API)
   if (activeConfig.provider === 'gemini') {
     if (activeConfig.geminiApiKey) {
       try {
@@ -486,7 +542,7 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
     }
   }
 
-  // 2. Ollama / Self-Hosted Model ("Öz Modelimiz")
+  // 4. OLLAMA (Custom Local Developer Model)
   if (activeConfig.provider === 'ollama') {
     try {
       const text = await callOllama(
@@ -514,15 +570,15 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
     }
   }
 
-  // 3. Offline Smart Engine
-  const localText = runLocalClinicalEngine(
+  // Final fallback
+  const fallbackText = runLocalClinicalEngine(
     options.patient,
     options.records,
     options.question,
   );
   return {
-    text: localText,
+    text: fallbackText,
     provider: 'offline',
-    model: 'Daxili Analizator',
+    model: 'MediAssist AI (Oflayn)',
   };
 }

@@ -57,7 +57,7 @@ export function AiScreen() {
   const [thinking, setThinking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiConfig, setAiConfig] = useState<AiConfig>({
-    provider: 'offline',
+    provider: 'hybrid',
     geminiApiKey: '',
     geminiModel: 'gemini-1.5-flash',
     ollamaUrl: getDefaultOllamaUrl(),
@@ -228,11 +228,13 @@ export function AiScreen() {
   };
 
   const activeProviderLabel =
-    aiConfig.provider === 'gemini'
-      ? 'Gemini 1.5'
+    aiConfig.provider === 'hybrid'
+      ? 'Hibrid AI'
+      : aiConfig.provider === 'offline'
+      ? 'Daxili AI'
       : aiConfig.provider === 'ollama'
       ? `Ollama (${aiConfig.ollamaModel})`
-      : 'Daxili AI';
+      : 'Gemini 1.5';
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
@@ -254,12 +256,14 @@ export function AiScreen() {
               hitSlop={10}
               style={{ backgroundColor: colors.surface, borderColor: colors.border }}
               className="h-10 flex-row items-center rounded-2xl border px-3 active:opacity-70 shadow-sm">
-              {aiConfig.provider === 'gemini' ? (
+              {aiConfig.provider === 'hybrid' ? (
                 <Sparkles size={16} color={colors.primary} />
+              ) : aiConfig.provider === 'offline' ? (
+                <Brain size={16} color="#8B5CF6" />
               ) : aiConfig.provider === 'ollama' ? (
                 <Server size={16} color="#10B981" />
               ) : (
-                <Brain size={16} color="#8B5CF6" />
+                <Sparkles size={16} color={colors.primary} />
               )}
               <Text
                 style={{ color: colors.text }}
@@ -664,11 +668,12 @@ function AiSettingsModal({
             <Text style={{ color: colors.textMuted }} className="mb-2 text-xs font-bold uppercase tracking-wider">
               AI Mühərriki
             </Text>
-            <View className="mb-4 flex-row gap-2">
+            <View className="mb-4 flex-row flex-wrap gap-2">
               {[
-                { id: 'gemini' as const, label: 'Google Gemini', sub: '100% Pulsuz', icon: Sparkles },
-                { id: 'ollama' as const, label: 'Öz Modelimiz', sub: 'Ollama / Llama', icon: Server },
+                { id: 'hybrid' as const, label: 'Hibrid AI', sub: 'Online + Oflayn', icon: Sparkles },
                 { id: 'offline' as const, label: 'Daxili Analiz', sub: 'İnternetsiz', icon: Brain },
+                { id: 'ollama' as const, label: 'Lokal Ollama', sub: 'Kompüterdə', icon: Server },
+                { id: 'gemini' as const, label: 'Google Gemini', sub: '100% Pulsuz', icon: Sparkles },
               ].map(opt => {
                 const isSelected = provider === opt.id;
                 const IconComp = opt.icon;
@@ -679,8 +684,9 @@ function AiSettingsModal({
                     style={{
                       backgroundColor: isSelected ? colors.primarySoft : colors.field,
                       borderColor: isSelected ? colors.primary : colors.border,
+                      width: '48%',
                     }}
-                    className="flex-1 items-center rounded-2xl border p-2.5 active:opacity-75">
+                    className="items-center rounded-2xl border p-2.5 active:opacity-75">
                     <IconComp
                       size={18}
                       color={isSelected ? colors.primary : colors.textMuted}
@@ -699,6 +705,23 @@ function AiSettingsModal({
                 );
               })}
             </View>
+
+            {/* Provider: Hybrid (Recommended Default) */}
+            {provider === 'hybrid' && (
+              <View
+                style={{ backgroundColor: colors.field }}
+                className="rounded-2xl p-4">
+                <View className="flex-row items-center">
+                  <Sparkles size={18} color={colors.primary} />
+                  <Text style={{ color: colors.text }} className="ml-2 text-sm font-bold">
+                    Hibrid AI Rejimi (Tövsiyə olunur)
+                  </Text>
+                </View>
+                <Text style={{ color: colors.textMuted }} className="mt-2 text-xs leading-5">
+                  Tətbiq internet olduqda mərkəzi serverimizdəki modeldən cavab alır. İnternet kəsildikdə və ya zəif olduqda isə avtomatik olaraq daxili oflayn modelə keçir. Həkimin heç bir IP və ya xüsusi açar daxil etməsinə ehtiyac yoxdur.
+                </Text>
+              </View>
+            )}
 
             {/* Provider: Google Gemini */}
             {provider === 'gemini' && (
