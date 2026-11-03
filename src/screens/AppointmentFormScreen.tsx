@@ -271,7 +271,7 @@ export function AppointmentFormScreen({
           onChangeText={setNotes}
         />
 
-        <View className="mt-2 mb-8 gap-3">
+        <View className="mt-2 mb-8">
           <Button
             label={t('common.save')}
             size="lg"
@@ -279,18 +279,6 @@ export function AppointmentFormScreen({
             disabled={deleting}
             onPress={onSave}
           />
-
-          {isEditing && (
-            <Button
-              label={t('common.delete') || 'Sil'}
-              variant="danger"
-              size="lg"
-              icon={Trash2}
-              loading={deleting}
-              disabled={saving}
-              onPress={onDelete}
-            />
-          )}
         </View>
       </KeyboardScrollView>
 
