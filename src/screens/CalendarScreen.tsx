@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -13,6 +14,7 @@ import {
   FileText,
   FlaskConical,
   Home,
+  MessageCircle,
   MoreVertical,
   Search,
   Stethoscope,
@@ -48,14 +50,44 @@ import {
 import { useFocusData } from '../utils/hooks';
 import { cancelAppointmentNotification, syncUpcomingAppointments } from '../utils/notifications';
 
-export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
-  const { patient, patients } = usePatient();
+export function CalendarScreen({ navigation, route }: RootScreenProps<'Calendar'>) {
+  const { patient, patients, select } = usePatient();
   const { language, t } = useLanguage();
   const { colors, tints } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, 12);
-  const [selected, setSelected] = useState(() => new Date());
+
+  const routeDate = route.params?.date;
+  const routePatientId = route.params?.patientId;
+
+  const [selected, setSelected] = useState(() => {
+    if (routeDate) {
+      const d = parseDate(routeDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  });
   const [month, setMonth] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
+
+  // Auto-select patient from notification or deep link params
+  useEffect(() => {
+    if (routePatientId && (!patient || patient.id !== routePatientId)) {
+      select(routePatientId);
+    }
+  }, [routePatientId]);
+
+  // Update calendar selection if route date params change
+  useEffect(() => {
+    if (routeDate) {
+      const d = parseDate(routeDate);
+      if (!isNaN(d.getTime())) {
+        setSelected(d);
+        if (d.getMonth() !== month.getMonth() || d.getFullYear() !== month.getFullYear()) {
+          setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+        }
+      }
+    }
+  }, [routeDate]);
 
   const {
     data: appointments,
@@ -115,27 +147,67 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
     [appointments, selected],
   );
 
+  const openWhatsApp = (phone: string, text: string) => {
+    const cleanPhone = phone.replace(/[^\d+]/g, '').replace('+', '');
+    const url = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
+    Linking.canOpenURL(url)
+      .then(supported => {
+        if (supported) {
+          Linking.openURL(url);
+        } else {
+          Linking.openURL(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`);
+        }
+      })
+      .catch(() => {
+        Linking.openURL(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`);
+      });
+  };
+
   const onMenu = (item: Appointment) => {
-    Alert.alert(localizeAppointmentTitle(item.title, t), `${formatDate(item.dateTime, language)} • ${formatTime(item.dateTime)}`, [
+    const p = patients.find(pat => pat.id === item.patientId);
+    const pPhone = p?.phone;
+
+    const buttons: any[] = [
       { text: t('common.close'), style: 'cancel' },
-      {
-        text: t('common.edit'),
-        onPress: () => navigation.navigate('AppointmentForm', { appointment: item }),
-      },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await cancelAppointmentNotification(item.id);
-            await appointmentsApi.remove(item.id);
-            await reload();
-          } catch (e) {
-            Alert.alert(t('common.error'), (e as Error).message);
-          }
+    ];
+
+    if (pPhone) {
+      buttons.push({
+        text: '💬 WhatsApp ilə xatırlat',
+        onPress: () => {
+          const timeStr = formatTime(item.dateTime);
+          const dateStr = formatDate(item.dateTime, language);
+          const pName = p ? `${p.firstName} ${p.lastName}`.trim() : 'Pasiyent';
+          const msg = `Salam ${pName}, MediAssist-dən xatırladırıq: ${dateStr} tarixində saat ${timeStr}-da həkim qəbulunuz var.`;
+          openWhatsApp(pPhone, msg);
         },
+      });
+    }
+
+    buttons.push({
+      text: t('common.edit'),
+      onPress: () => navigation.navigate('AppointmentForm', { appointment: item }),
+    });
+
+    buttons.push({
+      text: t('common.delete'),
+      style: 'destructive',
+      onPress: async () => {
+        try {
+          await cancelAppointmentNotification(item.id);
+          await appointmentsApi.remove(item.id);
+          await reload();
+        } catch (e) {
+          Alert.alert(t('common.error'), (e as Error).message);
+        }
       },
-    ]);
+    });
+
+    Alert.alert(
+      localizeAppointmentTitle(item.title, t),
+      `${formatDate(item.dateTime, language)} • ${formatTime(item.dateTime)}`,
+      buttons,
+    );
   };
 
   const isToday = isSameDay(selected, new Date());
@@ -224,6 +296,22 @@ export function CalendarScreen({ navigation }: RootScreenProps<'Calendar'>) {
                     </Text>
                   )}
                 </View>
+                {!!p?.phone && (
+                  <Pressable
+                    onPress={() => {
+                      const timeStr = formatTime(item.dateTime);
+                      const dateStr = formatDate(item.dateTime, language);
+                      const pName = `${p.firstName} ${p.lastName}`.trim();
+                      const msg = `Salam ${pName}, MediAssist-dən xatırladırıq: ${dateStr} tarixində saat ${timeStr}-da həkim qəbulunuz var.`;
+                      openWhatsApp(p.phone, msg);
+                    }}
+                    hitSlop={8}
+                    accessibilityLabel="WhatsApp ilə xatırlat"
+                    style={{ backgroundColor: '#25D366' }}
+                    className="mr-2 h-9 w-9 items-center justify-center rounded-xl active:opacity-75 shadow-sm">
+                    <MessageCircle size={17} color="#FFFFFF" />
+                  </Pressable>
+                )}
                 <Pressable
                   onPress={() => onMenu(item)}
                   hitSlop={12}

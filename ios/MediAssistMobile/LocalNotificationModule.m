@@ -16,6 +16,7 @@ RCT_EXPORT_METHOD(scheduleNotification:(double)id
                   title:(NSString *)title
                   message:(NSString *)message
                   triggerTimeMillis:(double)triggerTimeMillis
+                  deepLinkUrl:(NSString *)deepLinkUrl
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
@@ -31,6 +32,9 @@ RCT_EXPORT_METHOD(scheduleNotification:(double)id
         content.title = title;
         content.body = message;
         content.sound = [UNNotificationSound defaultSound];
+        if (deepLinkUrl && deepLinkUrl.length > 0) {
+            content.userInfo = @{@"url": deepLinkUrl};
+        }
         
         NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
         NSTimeInterval target = triggerTimeMillis / 1000.0;

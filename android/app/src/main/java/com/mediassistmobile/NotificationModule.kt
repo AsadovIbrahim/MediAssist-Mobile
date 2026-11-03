@@ -21,6 +21,7 @@ class NotificationModule(private val reactContext: ReactApplicationContext) :
         title: String,
         message: String,
         triggerTimeMillis: Double,
+        deepLinkUrl: String?,
         promise: Promise
     ) {
         try {
@@ -30,6 +31,7 @@ class NotificationModule(private val reactContext: ReactApplicationContext) :
                 putExtra("id", id.toInt())
                 putExtra("title", title)
                 putExtra("message", message)
+                putExtra("deepLinkUrl", deepLinkUrl)
             }
 
             val pendingIntent = PendingIntent.getBroadcast(

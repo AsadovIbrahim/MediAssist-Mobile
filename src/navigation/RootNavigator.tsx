@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -98,6 +98,17 @@ function MainTabs() {
   );
 }
 
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ['mediassist://'],
+  config: {
+    screens: {
+      Calendar: 'calendar',
+      AppointmentForm: 'appointment',
+      PatientDashboard: 'patient-dashboard',
+    },
+  },
+};
+
 export function RootNavigator() {
   const { ready, user } = useAuth();
   const { isDark, colors } = useTheme();
@@ -123,7 +134,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer linking={linking} theme={navigationTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
         {!user ? (
           <>

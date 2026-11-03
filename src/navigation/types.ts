@@ -26,7 +26,7 @@ export type RootStackParamList = {
   RecordList: { kind: RecordKind };
   RecordForm: { kind: RecordKind; id?: string };
   RecordDetail: { kind: RecordKind; id: string };
-  Calendar: undefined;
+  Calendar: { date?: string; patientId?: string; appointmentId?: string } | undefined;
   AppointmentForm: { date?: string; appointment?: Appointment } | undefined;
   Ai: undefined;
   Patients: undefined;

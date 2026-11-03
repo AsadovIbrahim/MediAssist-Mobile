@@ -1,7 +1,7 @@
 import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Appointment } from '../api/types';
-import { formatTime, parseDate } from './format';
+import { formatTime, parseDate, toApiDate } from './format';
 
 export const NOTIFICATIONS_ENABLED_KEY = 'mediassist.settings.notifications';
 
@@ -51,6 +51,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 /** Schedule a local system notification for an appointment. */
 export async function scheduleAppointmentNotification(appointment: {
   id: string;
+  patientId?: string | null;
   title: string;
   patientName?: string | null;
   dateTime: string;
@@ -89,7 +90,19 @@ export async function scheduleAppointmentNotification(appointment: {
         ? `15 dəqiqə sonra (Saat ${timeText}) - ${appointment.title}`
         : message;
 
-    await LocalNotificationModule.scheduleNotification(id, title, notifMessage, triggerTime);
+    const dateStr = toApiDate(apptDate);
+    const patientParam = appointment.patientId
+      ? `&patientId=${encodeURIComponent(appointment.patientId)}`
+      : '';
+    const deepLinkUrl = `mediassist://calendar?date=${encodeURIComponent(dateStr)}${patientParam}&appointmentId=${encodeURIComponent(appointment.id)}`;
+
+    await LocalNotificationModule.scheduleNotification(
+      id,
+      title,
+      notifMessage,
+      triggerTime,
+      deepLinkUrl,
+    );
   } catch (e) {
     console.warn('Failed to schedule notification:', e);
   }

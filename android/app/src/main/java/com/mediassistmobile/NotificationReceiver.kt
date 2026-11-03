@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -35,9 +36,12 @@ class NotificationReceiver : BroadcastReceiver() {
             notificationManager.createNotificationChannel(channel)
         }
 
-        val launchIntent = Intent(context, MainActivity::class.java).apply {
+        val deepLinkUrl = intent.getStringExtra("deepLinkUrl") ?: "mediassist://calendar"
+        val launchIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(deepLinkUrl)).apply {
+            setClass(context, MainActivity::class.java)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("notificationId", id)
+            putExtra("deepLinkUrl", deepLinkUrl)
         }
 
         val pendingIntent = PendingIntent.getActivity(

@@ -125,6 +125,7 @@ export function AppointmentFormScreen({
           await cancelAppointmentNotification(editing.id);
           await scheduleAppointmentNotification({
             id: editing.id,
+            patientId: patient?.id || editing.patientId,
             title: title.trim(),
             patientName:
               patient ? `${patient.firstName} ${patient.lastName}` : (editing.patientName || null),
@@ -146,6 +147,7 @@ export function AppointmentFormScreen({
           try {
             await scheduleAppointmentNotification({
               id: created.id,
+              patientId: patient.id,
               title: created.title,
               patientName: `${patient.firstName} ${patient.lastName}`.trim(),
               dateTime: created.dateTime,
