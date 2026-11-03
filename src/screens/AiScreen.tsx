@@ -490,10 +490,24 @@ function FormattedAiText({ text, color }: { text: string; color: string }) {
           return <View key={lineIdx} className="h-1.5" />;
         }
 
+        const isDivider = /^[-*_]{3,}$/.test(trimmed);
+        if (isDivider) {
+          return (
+            <View
+              key={lineIdx}
+              style={{ borderBottomColor: color, opacity: 0.2 }}
+              className="my-2 border-b"
+            />
+          );
+        }
+
         const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-');
         const isNumbered = /^\d+\.\s/.test(trimmed);
         const isHeader = trimmed.startsWith('###') || trimmed.startsWith('##') || trimmed.startsWith('#');
-        const cleanLine = trimmed.replace(/^#{1,3}\s*/, '');
+        let cleanLine = trimmed.replace(/^#{1,3}\s*/, '');
+        if (isBullet) {
+          cleanLine = cleanLine.replace(/^[•\-]\s*/, '');
+        }
 
         // Split by **bold** delimiters
         const parts = cleanLine.split(/(\*\*[^*]+\*\*)/g);
