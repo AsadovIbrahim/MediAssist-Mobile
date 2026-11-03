@@ -44,6 +44,70 @@ import { useDebounced, useFocusData } from '../utils/hooks';
 import { pickDocuments, pickImages, takePhoto } from '../utils/media';
 import { offlineStorage } from '../utils/offlineStorage';
 
+/**
+ * Deduplicates paragraphs and consecutive identical lines in a text note.
+ */
+export function deduplicateText(rawText: string): string {
+  if (!rawText) return '';
+
+  // 1. Split into lines and filter out consecutive identical non-empty lines
+  const lines = rawText.split('\n');
+  const nonDupLines: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prev = nonDupLines[nonDupLines.length - 1];
+    if (line.trim().length > 0 && prev !== undefined && line.trim() === prev.trim()) {
+      continue;
+    }
+    nonDupLines.push(line);
+  }
+
+  // 2. Split into paragraphs (separated by 1 or more blank lines) and remove duplicate paragraphs
+  const paragraphs = nonDupLines
+    .join('\n')
+    .trim()
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  const uniqueParas: string[] = [];
+  for (const p of paragraphs) {
+    const key = p.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueParas.push(p);
+    }
+  }
+
+  return uniqueParas.join('\n\n');
+}
+
+/**
+ * Merges unique paragraphs across multiple text records without duplicating content.
+ */
+export function getConsolidatedText(textRecords: any[]): string {
+  if (!textRecords || textRecords.length === 0) return '';
+  const seen = new Set<string>();
+  const uniqueParas: string[] = [];
+
+  for (const rec of textRecords) {
+    const raw = (rec.description ?? rec.title ?? '').trim();
+    const clean = deduplicateText(raw);
+    if (!clean) continue;
+    const paras = clean.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    for (const p of paras) {
+      const key = p.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueParas.push(p);
+      }
+    }
+  }
+
+  return uniqueParas.join('\n\n');
+}
+
 export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordList'>) {
   const { kind } = route.params;
   const { language, t } = useLanguage();
@@ -118,10 +182,11 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     setEditingRecordId(item.id);
     editingRecordIdRef.current = item.id;
     setEditingTitle(item.title);
-    const initialDesc =
+    const rawDesc =
       customText !== undefined
         ? customText
         : (item.description ?? item.title ?? '');
+    const initialDesc = deduplicateText(rawDesc);
     setText(initialDesc);
     textRef.current = initialDesc;
     if (item.date) {
@@ -146,15 +211,8 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     const textRecords = (items ?? []).filter(i => !i.files || i.files.length === 0);
     if (textRecords.length > 0) {
       const primary = textRecords[0];
-      const combinedText =
-        textRecords.length > 1
-          ? [...textRecords]
-              .reverse()
-              .map(r => (r.description || r.title || '').trim())
-              .filter(Boolean)
-              .join('\n\n')
-          : (primary.description ?? primary.title ?? '');
-      startEditingRecord(primary, combinedText);
+      const initialText = getConsolidatedText(textRecords);
+      startEditingRecord(primary, initialText);
     } else {
       setEditingRecordId(null);
       editingRecordIdRef.current = null;
@@ -181,6 +239,17 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     }
   }, [items]);
 
+  // Clean up any duplicated text inside composer whenever records reload
+  useEffect(() => {
+    if (!isEditingHistoryItem && text) {
+      const deduped = deduplicateText(text);
+      if (deduped !== text) {
+        setText(deduped);
+        textRef.current = deduped;
+      }
+    }
+  }, [items]);
+
   // Auto-populate composer with the patient's existing written text record(s) on initial load
   useEffect(() => {
     if (loading || !items || hasAutoLoadedRef.current) return;
@@ -192,16 +261,8 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     if (textRecords.length > 0) {
       hasAutoLoadedRef.current = true;
       const primary = textRecords[0];
-      const combinedText =
-        textRecords.length > 1
-          ? [...textRecords]
-              .reverse()
-              .map(r => (r.description || r.title || '').trim())
-              .filter(Boolean)
-              .join('\n\n')
-          : (primary.description ?? primary.title ?? '');
-
-      startEditingRecord(primary, combinedText);
+      const initialText = getConsolidatedText(textRecords);
+      startEditingRecord(primary, initialText);
       return;
     }
 
@@ -215,14 +276,15 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         title.endsWith('səsi') ||
         title.endsWith('qeydi') ||
         title.endsWith('sənədi') ||
-        title.endsWith('faylı');
+        title.endsWith('faylı') ||
+        title.endsWith('(Fayllı)');
       return desc.length > 0 || (!isDefaultTitle && title.length > 0);
     });
 
     if (recordsWithUserText.length > 0) {
       hasAutoLoadedRef.current = true;
       const latest = recordsWithUserText[0];
-      const initialText = (latest.description || latest.title || '').trim();
+      const initialText = deduplicateText((latest.description || latest.title || '').trim());
       setText(initialText);
       textRef.current = initialText;
     }
@@ -304,15 +366,26 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
           } else {
             await cfg.api.remove(textRecordId);
           }
-          setEditingRecordId(null);
-          editingRecordIdRef.current = null;
-          setText('');
-          textRef.current = '';
-          initialEditStateRef.current = null;
-          await reload();
-          refreshPatients().catch(() => {});
         } catch {}
       }
+
+      // Also clean up any extra duplicate pure text records
+      const extraTextRecords = (items ?? []).filter(
+        i => (!i.files || i.files.length === 0) && i.id !== textRecordId,
+      );
+      for (const extra of extraTextRecords) {
+        try {
+          await cfg.api.remove(extra.id);
+        } catch {}
+      }
+
+      setEditingRecordId(null);
+      editingRecordIdRef.current = null;
+      setText('');
+      textRef.current = '';
+      initialEditStateRef.current = null;
+      await reload();
+      refreshPatients().catch(() => {});
       return true;
     }
 
@@ -366,63 +439,62 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
 
       // 2. The written text stays in the composer at the top!
       if (trimmed.length > 0) {
-        const firstLine = trimmed.split('\n')[0].trim();
+        const cleanText = deduplicateText(trimmed);
+        const firstLine = cleanText.split('\n')[0].trim();
         const textTitle =
           firstLine.length > 50 ? `${firstLine.slice(0, 47)}...` : firstLine;
 
-        // Check if current textRecordId is a pure text record
-        const currentItem = textRecordId ? items?.find(i => i.id === textRecordId) : null;
-        const isCurrentPureText = currentItem
-          ? !currentItem.files || currentItem.files.length === 0
-          : false;
+        // If textRecordId is not set, see if there is an existing pure text record in items
+        if (!textRecordId) {
+          const existingTextRec = items?.find(i => !i.files || i.files.length === 0);
+          if (existingTextRec) {
+            textRecordId = existingTextRec.id;
+          }
+        }
 
-        if (textRecordId && isCurrentPureText) {
+        if (textRecordId) {
           await cfg.api.update(
             textRecordId,
             {
               patientId: patient.id,
               title: textTitle,
-              description: trimmed,
+              description: cleanText,
               kind: cfg.defaultKind,
               date: toApiDate(new Date()),
             },
           );
         } else {
-          // Check if there is an existing pure text record in items
-          const existingTextRec = items?.find(i => !i.files || i.files.length === 0);
-          if (existingTextRec) {
-            textRecordId = existingTextRec.id;
-            await cfg.api.update(
-              textRecordId,
-              {
-                patientId: patient.id,
-                title: textTitle,
-                description: trimmed,
-                kind: cfg.defaultKind,
-                date: toApiDate(new Date()),
-              },
-            );
-          } else {
-            // Create pure text record
-            const createdText = await cfg.api.create({
-              patientId: patient.id,
-              title: textTitle,
-              description: trimmed,
-              kind: cfg.defaultKind,
-              date: toApiDate(new Date()),
-            });
-            textRecordId = createdText.id;
-          }
+          // Create pure text record
+          const createdText = await cfg.api.create({
+            patientId: patient.id,
+            title: textTitle,
+            description: cleanText,
+            kind: cfg.defaultKind,
+            date: toApiDate(new Date()),
+          });
+          textRecordId = createdText.id;
+        }
+
+        // Clean up any extra/stale duplicate pure text records for this patient
+        const extraTextRecords = (items ?? []).filter(
+          i => (!i.files || i.files.length === 0) && i.id !== textRecordId,
+        );
+        for (const extra of extraTextRecords) {
+          try {
+            await cfg.api.remove(extra.id);
+          } catch {}
         }
 
         setEditingRecordId(textRecordId);
         editingRecordIdRef.current = textRecordId;
         setEditingTitle(textTitle);
+        setText(cleanText);
+        textRef.current = cleanText;
         setExistingFiles([]);
         existingFilesRef.current = [];
         initialEditStateRef.current = {
           id: textRecordId,
-          text: trimmed,
+          text: cleanText,
           existingFilesCount: 0,
         };
         hasAutoLoadedRef.current = true;
@@ -462,7 +534,9 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
       } else {
         // Editing existing record: ONLY save if user made actual changes!
         const init = initialEditStateRef.current;
-        const hasTextChanged = init ? trimmed !== init.text.trim() : false;
+        const cleanTrimmed = deduplicateText(trimmed);
+        const cleanInitText = deduplicateText(init?.text ?? '');
+        const hasTextChanged = init ? cleanTrimmed !== cleanInitText : false;
         const hasNewFiles = currentFiles.length > 0;
         const hasFilesRemoved = init
           ? existingFilesRef.current.length !== init.existingFilesCount
