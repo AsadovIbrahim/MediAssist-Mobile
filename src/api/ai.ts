@@ -44,6 +44,7 @@ export interface AskAiOptions {
   records: AiRecordItem[];
   history: AiChatMessage[];
   question: string;
+  language?: string;
   configOverride?: Partial<AiConfig>;
 }
 
@@ -348,6 +349,56 @@ async function callOllama(
 }
 
 /**
+ * Translates standard system-generated record/appointment titles into the user's active language
+ * so that previously saved Azerbaijani titles (e.g. "Şikayət (Fayllı)", "Həkim müayinəsi")
+ * display cleanly in English or Russian.
+ */
+function localizeRecordTitle(
+  title: string,
+  isEn: boolean,
+  isRu: boolean,
+): string {
+  if (!title) return title;
+  if (isEn) {
+    return title
+      .replace(/Şikayət\s*\(Fayllı\)/gi, 'Complaint (With files)')
+      .replace(/Şikayət\s*\(Səs qeydi\)/gi, 'Complaint (Voice note)')
+      .replace(/Şikayət/gi, 'Complaint')
+      .replace(/Müayinə\s*\(Fayllı\)/gi, 'Examination (With files)')
+      .replace(/Müayinə\s*\(Səs qeydi\)/gi, 'Examination (Voice note)')
+      .replace(/Müayinə/gi, 'Examination')
+      .replace(/Diaqnoz\s*\(Fayllı\)/gi, 'Diagnosis (With files)')
+      .replace(/Diaqnoz\s*\(Səs qeydi\)/gi, 'Diagnosis (Voice note)')
+      .replace(/Diaqnoz/gi, 'Diagnosis')
+      .replace(/Müalicə\s*\(Fayllı\)/gi, 'Treatment (With files)')
+      .replace(/Müalicə\s*\(Səs qeydi\)/gi, 'Treatment (Voice note)')
+      .replace(/Müalicə/gi, 'Treatment')
+      .replace(/Həkim müayinəsi/gi, 'Doctor visit')
+      .replace(/Analiz\s*\/\s*Lab/gi, 'Lab test')
+      .replace(/Digər/gi, 'Other');
+  }
+  if (isRu) {
+    return title
+      .replace(/Şikayət\s*\(Fayllı\)/gi, 'Жалоба (С файлами)')
+      .replace(/Şikayət\s*\(Səs qeydi\)/gi, 'Жалоба (Голосовая запись)')
+      .replace(/Şikayət/gi, 'Жалоба')
+      .replace(/Müayinə\s*\(Fayllı\)/gi, 'Осмотр (С файлами)')
+      .replace(/Müayinə\s*\(Səs qeydi\)/gi, 'Осмотр (Голосовая запись)')
+      .replace(/Müayinə/gi, 'Осмотр')
+      .replace(/Diaqnoz\s*\(Fayllı\)/gi, 'Диагноз (С файлами)')
+      .replace(/Diaqnoz\s*\(Səs qeydi\)/gi, 'Диагноз (Голосовая запись)')
+      .replace(/Diaqnoz/gi, 'Диагноз')
+      .replace(/Müalicə\s*\(Fayllı\)/gi, 'Лечение (С файлами)')
+      .replace(/Müalicə\s*\(Səs qeydi\)/gi, 'Лечение (Голосовая запись)')
+      .replace(/Müalicə/gi, 'Лечение')
+      .replace(/Həkim müayinəsi/gi, 'Прием врача')
+      .replace(/Analiz\s*\/\s*Lab/gi, 'Анализ / Лаборатория')
+      .replace(/Digər/gi, 'Другое');
+  }
+  return title;
+}
+
+/**
  * Smart Local Clinical Rule Engine
  * Runs 100% offline on the mobile device with zero network dependency.
  * Fully supports Azerbaijani ('az'), Russian ('ru'), and English ('en').
@@ -373,8 +424,8 @@ export function runLocalClinicalEngine(
 
   const isGreeting =
     q === 'salam' || q.startsWith('salam') ||
-    q === 'привет' || q.startsWith('привет') || q.startsWith('здравствуй') ||
-    q === 'hello' || q.startsWith('hello') || q.startsWith('hi');
+    q === 'привет' || q.startsWith('привет') || q.startsWith('здравствуй') || q.startsWith('добр') ||
+    q === 'hello' || q.startsWith('hello') || q.startsWith('hi') || q.startsWith('hey') || q.startsWith('good morning');
 
   if (isGreeting) {
     if (isRu) {
@@ -419,13 +470,14 @@ export function runLocalClinicalEngine(
 
     const list = complaints
       .map((c, i) => {
+        const title = localizeRecordTitle(c.title, isEn, isRu);
         if (isRu) {
-          return `**${i + 1}. ${c.title}** (${c.date})\n${c.description ? `   • Симптомы: ${c.description}` : '   • Дополнительного описания нет.'}`;
+          return `**${i + 1}. ${title}** (${c.date})\n${c.description ? `   • Симптомы: ${c.description}` : '   • Дополнительного описания нет.'}`;
         }
         if (isEn) {
-          return `**${i + 1}. ${c.title}** (${c.date})\n${c.description ? `   • Symptoms: ${c.description}` : '   • No additional description.'}`;
+          return `**${i + 1}. ${title}** (${c.date})\n${c.description ? `   • Symptoms: ${c.description}` : '   • No additional description.'}`;
         }
-        return `**${i + 1}. ${c.title}** (${c.date})\n${c.description ? `   • Əlamətlər: ${c.description}` : '   • Əlavə təsvir yoxdur.'}`;
+        return `**${i + 1}. ${title}** (${c.date})\n${c.description ? `   • Əlamətlər: ${c.description}` : '   • Əlavə təsvir yoxdur.'}`;
       })
       .join('\n\n');
 
@@ -451,13 +503,14 @@ export function runLocalClinicalEngine(
 
     const list = treatments
       .map((t, i) => {
+        const title = localizeRecordTitle(t.title, isEn, isRu);
         if (isRu) {
-          return `**${i + 1}. ${t.title}** (${t.date})\n${t.description ? `   • Дозировка / Режим: ${t.description}` : '   • Дополнительных указаний нет.'}`;
+          return `**${i + 1}. ${title}** (${t.date})\n${t.description ? `   • Дозировка / Режим: ${t.description}` : '   • Дополнительных указаний нет.'}`;
         }
         if (isEn) {
-          return `**${i + 1}. ${t.title}** (${t.date})\n${t.description ? `   • Dosage / Regimen: ${t.description}` : '   • No additional instructions noted.'}`;
+          return `**${i + 1}. ${title}** (${t.date})\n${t.description ? `   • Dosage / Regimen: ${t.description}` : '   • No additional instructions noted.'}`;
         }
-        return `**${i + 1}. ${t.title}** (${t.date})\n${t.description ? `   • Doza / Qəbul qaydası: ${t.description}` : '   • Əlavə təlimat qeyd edilməyib.'}`;
+        return `**${i + 1}. ${title}** (${t.date})\n${t.description ? `   • Doza / Qəbul qaydası: ${t.description}` : '   • Əlavə təlimat qeyd edilməyib.'}`;
       })
       .join('\n\n');
 
@@ -483,13 +536,14 @@ export function runLocalClinicalEngine(
 
     const list = diagnoses
       .map((d, i) => {
+        const title = localizeRecordTitle(d.title, isEn, isRu);
         if (isRu) {
-          return `**${i + 1}. ${d.title}** (${d.date})\n${d.description ? `   • Описание / Заметки: ${d.description}` : ''}`;
+          return `**${i + 1}. ${title}** (${d.date})\n${d.description ? `   • Описание / Заметки: ${d.description}` : ''}`;
         }
         if (isEn) {
-          return `**${i + 1}. ${d.title}** (${d.date})\n${d.description ? `   • Notes / Findings: ${d.description}` : ''}`;
+          return `**${i + 1}. ${title}** (${d.date})\n${d.description ? `   • Notes / Findings: ${d.description}` : ''}`;
         }
-        return `**${i + 1}. ${d.title}** (${d.date})\n${d.description ? `   • Təsvir / Qeyd: ${d.description}` : ''}`;
+        return `**${i + 1}. ${title}** (${d.date})\n${d.description ? `   • Təsvir / Qeyd: ${d.description}` : ''}`;
       })
       .join('\n\n');
 
@@ -514,7 +568,10 @@ export function runLocalClinicalEngine(
     }
 
     const list = appointments
-      .map((a, i) => `**${i + 1}. ${a.title}** — ${a.date}${a.description ? ` (${a.description})` : ''}`)
+      .map((a, i) => {
+        const title = localizeRecordTitle(a.title, isEn, isRu);
+        return `**${i + 1}. ${title}** — ${a.date}${a.description ? ` (${a.description})` : ''}`;
+      })
       .join('\n');
 
     if (isRu) {
@@ -531,10 +588,10 @@ export function runLocalClinicalEngine(
     const lines: string[] = [
       `👨‍⚕️ **${patientName} — Общий клинический анализ состояния:**`,
       '',
-      `• **Жалобы:** ${complaints.length > 0 ? `${complaints.length} зап. (${complaints.map(c => c.title).slice(0, 2).join(', ')})` : 'Записей нет'}`,
-      `• **Диагнозы:** ${diagnoses.length > 0 ? diagnoses.map(d => d.title).join(', ') : 'Не установлены'}`,
-      `• **Лечение:** ${treatments.length > 0 ? treatments.map(t => t.title).join(', ') : 'Не назначено'}`,
-      `• **Визиты:** ${appointments.length > 0 ? `${appointments[0].title} (${appointments[0].date})` : 'Не запланированы'}`,
+      `• **Жалобы:** ${complaints.length > 0 ? `${complaints.length} зап. (${complaints.map(c => localizeRecordTitle(c.title, isEn, isRu)).slice(0, 2).join(', ')})` : 'Записей нет'}`,
+      `• **Диагнозы:** ${diagnoses.length > 0 ? diagnoses.map(d => localizeRecordTitle(d.title, isEn, isRu)).join(', ') : 'Не установлены'}`,
+      `• **Лечение:** ${treatments.length > 0 ? treatments.map(t => localizeRecordTitle(t.title, isEn, isRu)).join(', ') : 'Не назначено'}`,
+      `• **Визиты:** ${appointments.length > 0 ? `${localizeRecordTitle(appointments[0].title, isEn, isRu)} (${appointments[0].date})` : 'Не запланированы'}`,
       '',
       '📌 **Клинические рекомендации:**',
     ];
@@ -559,10 +616,10 @@ export function runLocalClinicalEngine(
     const lines: string[] = [
       `👨‍⚕️ **${patientName} — General Clinical Assessment:**`,
       '',
-      `• **Complaints:** ${complaints.length > 0 ? `${complaints.length} records (${complaints.map(c => c.title).slice(0, 2).join(', ')})` : 'None recorded'}`,
-      `• **Diagnoses:** ${diagnoses.length > 0 ? diagnoses.map(d => d.title).join(', ') : 'None assigned'}`,
-      `• **Treatments:** ${treatments.length > 0 ? treatments.map(t => t.title).join(', ') : 'None prescribed'}`,
-      `• **Appointments:** ${appointments.length > 0 ? `${appointments[0].title} (${appointments[0].date})` : 'None scheduled'}`,
+      `• **Complaints:** ${complaints.length > 0 ? `${complaints.length} records (${complaints.map(c => localizeRecordTitle(c.title, isEn, isRu)).slice(0, 2).join(', ')})` : 'None recorded'}`,
+      `• **Diagnoses:** ${diagnoses.length > 0 ? diagnoses.map(d => localizeRecordTitle(d.title, isEn, isRu)).join(', ') : 'None assigned'}`,
+      `• **Treatments:** ${treatments.length > 0 ? treatments.map(t => localizeRecordTitle(t.title, isEn, isRu)).join(', ') : 'None prescribed'}`,
+      `• **Appointments:** ${appointments.length > 0 ? `${localizeRecordTitle(appointments[0].title, isEn, isRu)} (${appointments[0].date})` : 'None scheduled'}`,
       '',
       '📌 **Clinical Recommendations:**',
     ];
@@ -631,6 +688,7 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
         options.patient,
         options.records,
         options.question,
+        options.language || 'az',
       );
       return {
         text: localText,
@@ -646,6 +704,7 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
       options.patient,
       options.records,
       options.question,
+      options.language || 'az',
     );
     return {
       text: localText,
@@ -680,6 +739,7 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
           options.patient,
           options.records,
           options.question,
+          options.language || 'az',
         );
         return {
           text: `⚠️ **Gemini ilə əlaqə xətası:** ${err?.message || 'Serverə qoşulmaq olmadı.'}\n\n*Məlumat daxili kliniki analizator tərəfindən hazırlandı:*\n\n---\n\n${localSummary}`,
@@ -692,6 +752,7 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
         options.patient,
         options.records,
         options.question,
+        options.language || 'az',
       );
       return {
         text: `${localSummary}\n\n*(Məlumat daxili kliniki analizator tərəfindən hazırlandı. Yuxarıdakı tənzimləmələrdən pulsuz Google Gemini API açarı daxil edərək generativ AI rejimini aktivləşdirə bilərsiniz).*`,
@@ -720,6 +781,7 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
         options.patient,
         options.records,
         options.question,
+        options.language || 'az',
       );
       return {
         text: `🖥️ **Ollama serverinə qoşulmaq olmadı** (${activeConfig.ollamaUrl}).\n\n*Kompüterinizdə Ollama işləyənə qədər cavab daxili kliniki analizator tərəfindən təqdim edilir:*\n\n---\n\n${localSummary}`,
@@ -734,6 +796,7 @@ export async function askAi(options: AskAiOptions): Promise<AiResponse> {
     options.patient,
     options.records,
     options.question,
+    options.language || 'az',
   );
   return {
     text: fallbackText,

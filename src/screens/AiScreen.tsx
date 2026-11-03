@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -43,6 +43,14 @@ export function AiScreen() {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
+
+  const prevLangRef = useRef(language);
+  useEffect(() => {
+    if (prevLangRef.current !== language) {
+      prevLangRef.current = language;
+      setMessages([]);
+    }
+  }, [language]);
 
   const scrollRef = useRef<ScrollNode>(null);
 
@@ -159,7 +167,7 @@ export function AiScreen() {
   const handleClearChat = () => {
     Alert.alert(
       t('ai.clearChat'),
-      'Bütün söhbət tarixçəsi təmizlənsin?',
+      t('ai.clearChatConfirm'),
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
