@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -89,6 +89,23 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     existingFilesCount: number;
   } | null>(null);
 
+  // Track whether auto-load of existing written record has been performed
+  const hasAutoLoadedRef = useRef(false);
+
+  // Reset editor state and auto-load flag when patient or kind changes
+  useEffect(() => {
+    hasAutoLoadedRef.current = false;
+    setEditingRecordId(null);
+    editingRecordIdRef.current = null;
+    setText('');
+    textRef.current = '';
+    setFiles([]);
+    filesRef.current = [];
+    setExistingFiles([]);
+    existingFilesRef.current = [];
+    initialEditStateRef.current = null;
+  }, [patient?.id, kind]);
+
   // Fetch existing records
   const {
     data: items,
@@ -107,14 +124,128 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     );
   }, [patient?.id, kind, debouncedSearch]);
 
+  // Edit existing record inline
+  const startEditingRecord = (item: any, customText?: string) => {
+    setEditingRecordId(item.id);
+    editingRecordIdRef.current = item.id;
+    setEditingTitle(item.title);
+    const initialDesc =
+      customText !== undefined
+        ? customText
+        : (item.description ?? item.title ?? '');
+    setText(initialDesc);
+    textRef.current = initialDesc;
+    if (item.date) {
+      setDate(new Date(item.date));
+      dateRef.current = new Date(item.date);
+    }
+    const currentItemFiles: FileItem[] = item.files ?? [];
+    setExistingFiles(currentItemFiles);
+    existingFilesRef.current = currentItemFiles;
+    setFiles([]);
+    filesRef.current = [];
+    initialEditStateRef.current = {
+      id: item.id,
+      text: initialDesc,
+      existingFilesCount: currentItemFiles.length,
+    };
+  };
+
+  const cancelEditing = () => {
+    // If there is an existing primary text record, return to it instead of wiping blank
+    const textRecords = (items ?? []).filter(i => !i.files || i.files.length === 0);
+    if (textRecords.length > 0) {
+      const primary = textRecords[0];
+      const combinedText =
+        textRecords.length > 1
+          ? [...textRecords]
+              .reverse()
+              .map(r => (r.description || r.title || '').trim())
+              .filter(Boolean)
+              .join('\n\n')
+          : (primary.description ?? primary.title ?? '');
+      startEditingRecord(primary, combinedText);
+    } else {
+      setEditingRecordId(null);
+      editingRecordIdRef.current = null;
+      setEditingTitle('');
+      setText('');
+      textRef.current = '';
+      setFiles([]);
+      filesRef.current = [];
+      setExistingFiles([]);
+      existingFilesRef.current = [];
+      setDate(new Date());
+      dateRef.current = new Date();
+      initialEditStateRef.current = null;
+    }
+  };
+
+  // Auto-populate composer with the patient's existing written text record(s) on initial load
+  useEffect(() => {
+    if (loading || !items || hasAutoLoadedRef.current) return;
+    // If user already started typing or is editing, don't overwrite
+    if (editingRecordIdRef.current || textRef.current.trim().length > 0) return;
+
+    const textRecords = items.filter(i => !i.files || i.files.length === 0);
+    if (textRecords.length > 0) {
+      hasAutoLoadedRef.current = true;
+      const primary = textRecords[0];
+      const combinedText =
+        textRecords.length > 1
+          ? [...textRecords]
+              .reverse()
+              .map(r => (r.description || r.title || '').trim())
+              .filter(Boolean)
+              .join('\n\n')
+          : (primary.description ?? primary.title ?? '');
+
+      startEditingRecord(primary, combinedText);
+    }
+  }, [items, loading]);
+
+  // Check if currently editing the patient's ongoing written record
+  const isPrimaryTextRecord = useMemo(() => {
+    if (!editingRecordId || !items) return false;
+    const textRecords = items.filter(i => !i.files || i.files.length === 0);
+    return textRecords.length > 0 && textRecords[0].id === editingRecordId;
+  }, [editingRecordId, items]);
+
+  // History list only contains records with media attachments (photos, voice notes, documents),
+  // as pure text records are consolidated directly inside the top composer.
+  const historyItems = useMemo(() => {
+    if (!items) return [];
+    return items.filter(i => i.files && i.files.length > 0);
+  }, [items]);
+
   // Core save function
   const saveCurrentInput = async (isLeaving = false): Promise<boolean> => {
     const trimmed = textRef.current.trim();
     const currentFiles = filesRef.current;
     const currentExistingFiles = existingFilesRef.current;
+    const isEditing = !!editingRecordIdRef.current;
+    const targetId = editingRecordIdRef.current;
 
     // Nothing to save
     if (!trimmed && currentFiles.length === 0 && currentExistingFiles.length === 0) {
+      if (isEditing && targetId) {
+        try {
+          if (targetId.startsWith('local_')) {
+            const q = await offlineStorage.getQueue();
+            const match = q.find(x => x.recordId === targetId);
+            if (match) await offlineStorage.dequeue(match.id);
+          } else {
+            await cfg.api.remove(targetId);
+          }
+          setEditingRecordId(null);
+          editingRecordIdRef.current = null;
+          setText('');
+          textRef.current = '';
+          initialEditStateRef.current = null;
+          await refreshPatients();
+          await reload();
+        } catch {}
+      }
       return true;
     }
     if (!patient) {
@@ -158,8 +289,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         ? 'Document'
         : cfg.defaultKind;
 
-      const isEditing = !!editingRecordIdRef.current;
-      const targetId = editingRecordIdRef.current;
+      let savedRecordId = targetId;
 
       if (isEditing && targetId) {
         await cfg.api.update(
@@ -195,6 +325,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
           },
           currentFiles,
         );
+        savedRecordId = created.id;
         if (!created.id.startsWith('local_') && currentFiles.length > 0) {
           for (const file of currentFiles) {
             try {
@@ -209,18 +340,19 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
       setAutoSaveStatus(null);
 
       if (!isLeaving) {
-        setText('');
-        textRef.current = '';
+        if (savedRecordId) {
+          setEditingRecordId(savedRecordId);
+          editingRecordIdRef.current = savedRecordId;
+          setEditingTitle(finalTitle);
+          initialEditStateRef.current = {
+            id: savedRecordId,
+            text: trimmed,
+            existingFilesCount: currentExistingFiles.length + currentFiles.length,
+          };
+          hasAutoLoadedRef.current = true;
+        }
         setFiles([]);
         filesRef.current = [];
-        setExistingFiles([]);
-        existingFilesRef.current = [];
-        setEditingRecordId(null);
-        editingRecordIdRef.current = null;
-        setEditingTitle('');
-        setDate(new Date());
-        dateRef.current = new Date();
-        initialEditStateRef.current = null;
       }
 
       await refreshPatients();
@@ -331,45 +463,6 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
     }
   };
 
-  // Edit existing record inline
-  const startEditingRecord = (item: any) => {
-    setEditingRecordId(item.id);
-    editingRecordIdRef.current = item.id;
-    setEditingTitle(item.title);
-    const initialDesc = item.description ?? item.title ?? '';
-    setText(initialDesc);
-    textRef.current = initialDesc;
-    if (item.date) {
-      setDate(new Date(item.date));
-      dateRef.current = new Date(item.date);
-    }
-    const currentItemFiles: FileItem[] = item.files ?? [];
-    setExistingFiles(currentItemFiles);
-    existingFilesRef.current = currentItemFiles;
-    setFiles([]);
-    filesRef.current = [];
-    initialEditStateRef.current = {
-      id: item.id,
-      text: initialDesc,
-      existingFilesCount: currentItemFiles.length,
-    };
-  };
-
-  const cancelEditing = () => {
-    setEditingRecordId(null);
-    editingRecordIdRef.current = null;
-    setEditingTitle('');
-    setText('');
-    textRef.current = '';
-    setFiles([]);
-    filesRef.current = [];
-    setExistingFiles([]);
-    existingFilesRef.current = [];
-    setDate(new Date());
-    dateRef.current = new Date();
-    initialEditStateRef.current = null;
-  };
-
   // Multi-select handlers
   const enterSelectionMode = (initialId?: string) => {
     setSelectionMode(true);
@@ -398,11 +491,11 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   };
 
   const toggleSelectAll = () => {
-    if (!items || items.length === 0) return;
-    if (selectedIds.size === items.length) {
+    if (!historyItems || historyItems.length === 0) return;
+    if (selectedIds.size === historyItems.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(items.map(i => i.id)));
+      setSelectedIds(new Set(historyItems.map(i => i.id)));
     }
   };
 
@@ -481,7 +574,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
               style={{ backgroundColor: colors.surface, borderColor: colors.border }}
               className="h-10 px-3 items-center justify-center rounded-xl border active:opacity-70">
               <Text style={{ color: colors.primary }} className="text-[13px] font-semibold">
-                {selectedIds.size === (items?.length ?? 0)
+                {selectedIds.size === (historyItems?.length ?? 0)
                   ? t('common.deselectAll') || 'Ləğv et'
                   : t('common.selectAll') || 'Hamısı'}
               </Text>
@@ -536,7 +629,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
           </View>
 
           {/* Header Action: Multi-select */}
-          {(items?.length ?? 0) > 0 && (
+          {(historyItems?.length ?? 0) > 0 && (
             <Pressable
               onPress={() => enterSelectionMode()}
               hitSlop={10}
@@ -585,26 +678,29 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                   />
                 )}
 
-                {editingRecordId && (
-                  <>
-                    <Pressable
-                      onPress={cancelEditing}
-                      hitSlop={8}
-                      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                      className="rounded-lg border px-2.5 py-1 active:opacity-70">
-                      <Text style={{ color: colors.textMuted }} className="text-[12px] font-semibold">
-                        Ləğv et
-                      </Text>
-                    </Pressable>
+                {/* Cancel button: ONLY when editing a separate media record from the list */}
+                {editingRecordId && !isPrimaryTextRecord && (
+                  <Pressable
+                    onPress={cancelEditing}
+                    hitSlop={8}
+                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    className="rounded-lg border px-2.5 py-1 active:opacity-70">
+                    <Text style={{ color: colors.textMuted }} className="text-[12px] font-semibold">
+                      Ləğv et
+                    </Text>
+                  </Pressable>
+                )}
 
-                    <Pressable
-                      onPress={() => saveCurrentInput(false)}
-                      hitSlop={8}
-                      style={{ backgroundColor: colors.primary }}
-                      className="h-7 w-7 items-center justify-center rounded-lg active:opacity-80 shadow-sm">
-                      <Save size={15} color="#FFFFFF" strokeWidth={2.2} />
-                    </Pressable>
-                  </>
+                {/* Save Icon Button: Show whenever there is content */}
+                {(text.trim().length > 0 || files.length > 0 || existingFiles.length > 0) && (
+                  <Pressable
+                    onPress={() => saveCurrentInput(false)}
+                    hitSlop={8}
+                    accessibilityLabel="Yadda saxla"
+                    style={{ backgroundColor: colors.primary }}
+                    className="h-7 w-7 items-center justify-center rounded-lg active:opacity-80 shadow-sm">
+                    <Save size={15} color="#FFFFFF" strokeWidth={2.2} />
+                  </Pressable>
                 )}
               </View>
             </View>
@@ -619,9 +715,10 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
               }
               placeholderTextColor={colors.textLight}
               multiline
+              scrollEnabled={true}
               style={{
-                minHeight: 65,
-                maxHeight: 140,
+                minHeight: 85,
+                maxHeight: 180,
                 color: colors.text,
                 textAlignVertical: 'top',
               }}
@@ -780,26 +877,28 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
             </View>
           </Card>
 
-          {/* History Section Title */}
-          <View className="mb-2 px-1 flex-row items-center justify-between">
-            <Text style={{ color: colors.text }} className="text-[16px] font-bold">
-              {`Tarixçə (${items?.length ?? 0})`}
-            </Text>
-            {(items?.length ?? 0) > 2 && (
-              <Text style={{ color: colors.textMuted }} className="text-[12px]">
-                Toxunaraq düzəliş edin
+          {/* History Section Title (only if there are media/attachment items) */}
+          {historyItems.length > 0 && (
+            <View className="mb-2 px-1 flex-row items-center justify-between">
+              <Text style={{ color: colors.text }} className="text-[16px] font-bold">
+                {`Fayllar və tarixçə (${historyItems.length})`}
               </Text>
-            )}
-          </View>
+              {historyItems.length > 2 && (
+                <Text style={{ color: colors.textMuted }} className="text-[12px]">
+                  Toxunaraq düzəliş edin
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       )}
 
-      {/* Main List for History */}
+      {/* Main List for History (Media and file attachments) */}
       {loading ? (
         <Loading />
       ) : (
         <FlatList
-          data={items ?? []}
+          data={historyItems}
           keyExtractor={item => item.id}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -826,15 +925,6 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
               onEdit={() => startEditingRecord(item)}
             />
           )}
-          ListEmptyComponent={
-            !selectionMode ? (
-              <View className="items-center py-6 px-6">
-                <Text style={{ color: colors.textMuted }} className="text-center text-[13px]">
-                  {`Hələ ${cfg.singular.toLowerCase()} əlavə edilməyib.\nYuxarıdakı xanaya yazaraq ilk qeydinizi əlavə edin.`}
-                </Text>
-              </View>
-            ) : undefined
-          }
         />
       )}
 
