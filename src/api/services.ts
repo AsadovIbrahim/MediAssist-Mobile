@@ -335,6 +335,8 @@ export const treatmentsApi = {
 };
 
 export const appointmentsApi = {
+  list: (patientId: string) =>
+    appointmentsApi.range(patientId, '2000-01-01', '2099-12-31'),
   range: async (patientId: string, startDate: string, endDate: string): Promise<Appointment[]> => {
     try {
       const remote = await http.get<Appointment[]>('appointments', {
