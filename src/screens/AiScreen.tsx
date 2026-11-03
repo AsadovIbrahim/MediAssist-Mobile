@@ -137,6 +137,7 @@ export function AiScreen() {
         : null,
       recordsPayload,
       promptText,
+      language,
     );
 
     // Quick natural transition for UX
@@ -211,7 +212,7 @@ export function AiScreen() {
               </View>
 
               <Text style={{ color: colors.textMuted }} className="mt-3 text-sm leading-5">
-                {`${patientFullName(patient) || t('ai.notSelected')} (${data?.complaints.length ?? 0} ${t('record.complaints').toLowerCase()}, ${data?.diagnoses.length ?? 0} ${t('record.diagnoses').toLowerCase()}, ${data?.treatments.length ?? 0} ${t('record.treatments').toLowerCase()}${data?.appointments?.length ? `, ${data.appointments.length} görüş` : ''})`}
+                {`${patientFullName(patient) || t('ai.notSelected')} (${data?.complaints.length ?? 0} ${t('ai.complaints')}, ${data?.diagnoses.length ?? 0} ${t('ai.diagnoses')}, ${data?.treatments.length ?? 0} ${t('ai.treatments')}${data?.appointments?.length ? `, ${data.appointments.length} ${t('ai.appointments')}` : ''})`}
               </Text>
 
               {/* Quick AI Action Prompt Chips */}
