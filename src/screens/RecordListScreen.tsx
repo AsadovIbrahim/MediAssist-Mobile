@@ -92,19 +92,8 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   // Track whether auto-load of existing written record has been performed
   const hasAutoLoadedRef = useRef(false);
 
-  // Reset editor state and auto-load flag when patient or kind changes
-  useEffect(() => {
-    hasAutoLoadedRef.current = false;
-    setEditingRecordId(null);
-    editingRecordIdRef.current = null;
-    setText('');
-    textRef.current = '';
-    setFiles([]);
-    filesRef.current = [];
-    setExistingFiles([]);
-    existingFilesRef.current = [];
-    initialEditStateRef.current = null;
-  }, [patient?.id, kind]);
+  // Track if user is currently inspecting a separate history item from the list below
+  const [isEditingHistoryItem, setIsEditingHistoryItem] = useState(false);
 
   // Fetch existing records
   const {
@@ -152,6 +141,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
   };
 
   const cancelEditing = () => {
+    setIsEditingHistoryItem(false);
     // If there is an existing primary text record, return to it instead of wiping blank
     const textRecords = (items ?? []).filter(i => !i.files || i.files.length === 0);
     if (textRecords.length > 0) {
@@ -180,6 +170,16 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
       initialEditStateRef.current = null;
     }
   };
+
+  // Synchronize existingFiles with reloaded items when an active record is being edited
+  useEffect(() => {
+    if (!items || !editingRecordIdRef.current) return;
+    const current = items.find(i => i.id === editingRecordIdRef.current);
+    if (current && current.files) {
+      setExistingFiles(current.files);
+      existingFilesRef.current = current.files;
+    }
+  }, [items]);
 
   // Auto-populate composer with the patient's existing written text record(s) on initial load
   useEffect(() => {
@@ -289,6 +289,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         ? 'Document'
         : cfg.defaultKind;
 
+      const uploadedFiles: FileItem[] = [...currentExistingFiles];
       let savedRecordId = targetId;
 
       if (isEditing && targetId) {
@@ -308,7 +309,10 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         if (!targetId.startsWith('local_') && currentFiles.length > 0) {
           for (const file of currentFiles) {
             try {
-              await cfg.api.upload(targetId, file);
+              const uploaded = await cfg.api.upload(targetId, file);
+              if (uploaded) {
+                uploadedFiles.push(uploaded);
+              }
             } catch (err) {
               console.warn('Failed to upload file for updated record:', err);
             }
@@ -329,7 +333,10 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         if (!created.id.startsWith('local_') && currentFiles.length > 0) {
           for (const file of currentFiles) {
             try {
-              await cfg.api.upload(created.id, file);
+              const uploaded = await cfg.api.upload(created.id, file);
+              if (uploaded) {
+                uploadedFiles.push(uploaded);
+              }
             } catch (err) {
               console.warn('Failed to upload file for created record:', err);
             }
@@ -344,19 +351,22 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
           setEditingRecordId(savedRecordId);
           editingRecordIdRef.current = savedRecordId;
           setEditingTitle(finalTitle);
+          setExistingFiles(uploadedFiles);
+          existingFilesRef.current = uploadedFiles;
           initialEditStateRef.current = {
             id: savedRecordId,
             text: trimmed,
-            existingFilesCount: currentExistingFiles.length + currentFiles.length,
+            existingFilesCount: uploadedFiles.length,
           };
           hasAutoLoadedRef.current = true;
         }
         setFiles([]);
         filesRef.current = [];
+        setIsEditingHistoryItem(false);
       }
 
-      await refreshPatients();
       await reload();
+      refreshPatients().catch(() => {});
       return true;
     } catch (e: any) {
       setAutoSaveStatus(null);
@@ -678,8 +688,8 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                   />
                 )}
 
-                {/* Cancel button: ONLY when editing a separate media record from the list */}
-                {editingRecordId && !isPrimaryTextRecord && (
+                {/* Cancel button: ONLY when inspecting/editing a separate media record from the list */}
+                {isEditingHistoryItem && (
                   <Pressable
                     onPress={cancelEditing}
                     hitSlop={8}
@@ -914,6 +924,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                 if (selectionMode) {
                   toggleSelect(item.id);
                 } else {
+                  setIsEditingHistoryItem(true);
                   startEditingRecord(item);
                 }
               }}
@@ -922,7 +933,10 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                   enterSelectionMode(item.id);
                 }
               }}
-              onEdit={() => startEditingRecord(item)}
+              onEdit={() => {
+                setIsEditingHistoryItem(true);
+                startEditingRecord(item);
+              }}
             />
           )}
         />
