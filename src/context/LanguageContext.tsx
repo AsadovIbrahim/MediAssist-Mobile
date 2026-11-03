@@ -56,8 +56,8 @@ export const TRANSLATIONS = {
     'dashboard.diagnosesDesc': 'Diaqnoz sənədləri',
     'dashboard.treatments': 'Müalicə',
     'dashboard.treatmentsDesc': 'Müalicə planları, reseptlər',
-    'dashboard.ai': 'AI',
-    'dashboard.aiDesc': 'AI ilə bağlı sənədlər, qeydlər',
+    'dashboard.ai': 'AI Köməkçi',
+    'dashboard.aiDesc': 'Ağıllı tibbi təhlil və xülasə',
     'dashboard.calendar': 'Təqvim',
     'dashboard.calendarDesc': 'Görüşlər, xatırlatmalar',
 
@@ -328,7 +328,7 @@ export const TRANSLATIONS = {
     'dashboard.treatments': 'Treatment',
     'dashboard.treatmentsDesc': 'Treatment plans, prescriptions',
     'dashboard.ai': 'AI Assistant',
-    'dashboard.aiDesc': 'AI notes and clinical summaries',
+    'dashboard.aiDesc': 'Smart medical analysis & summary',
     'dashboard.calendar': 'Calendar',
     'dashboard.calendarDesc': 'Appointments and reminders',
 
@@ -598,8 +598,8 @@ export const TRANSLATIONS = {
     'dashboard.diagnosesDesc': 'Документы диагнозов',
     'dashboard.treatments': 'Лечение',
     'dashboard.treatmentsDesc': 'Планы лечения, рецепты',
-    'dashboard.ai': 'ИИ Ассистент',
-    'dashboard.aiDesc': 'Анализ ИИ, клинические заметки',
+    'dashboard.ai': 'ИИ Помощник',
+    'dashboard.aiDesc': 'Умный медицинский анализ и резюме',
     'dashboard.calendar': 'Календарь',
     'dashboard.calendarDesc': 'Приемы и напоминания',
 
