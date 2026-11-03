@@ -725,24 +725,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
         <View className="px-4">
           <Card className="mb-3 p-4 shadow-sm">
             {/* Header Row of Composer */}
-            <View className="mb-2 flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1 pr-2">
-                <View
-                  style={{
-                    backgroundColor: editingRecordId ? '#2563EB' : colors.primary,
-                  }}
-                  className="mr-2 h-2.5 w-2.5 rounded-full"
-                />
-                <Text
-                  style={{ color: colors.text }}
-                  className="text-[15px] font-bold"
-                  numberOfLines={1}>
-                  {editingRecordId
-                    ? cfg.singular
-                    : `Yeni ${cfg.singular.toLowerCase()} yazın`}
-                </Text>
-              </View>
-
+            <View className="mb-2 flex-row items-center justify-end">
               <View className="flex-row items-center gap-2">
                 {autoSaveStatus === 'saving' && (
                   <ActivityIndicator
@@ -766,7 +749,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                 )}
 
                 {/* Save Icon Button: Show whenever there is content */}
-                {(text.trim().length > 0 || files.length > 0 || existingFiles.length > 0) && (
+                {(text.trim().length > 0 || files.length > 0 || (isEditingHistoryItem && existingFiles.length > 0)) && (
                   <Pressable
                     onPress={() => saveCurrentInput(false)}
                     hitSlop={8}
@@ -920,34 +903,7 @@ export function RecordListScreen({ navigation, route }: RootScreenProps<'RecordL
                     </Text>
                   </Pressable>
                 )}
-
-                {cfg.hasDate && (
-                  <Pressable
-                    onPress={() => setShowDatePicker(true)}
-                    hitSlop={6}
-                    style={{ backgroundColor: colors.field, borderColor: colors.border }}
-                    className="h-8.5 flex-row items-center rounded-xl border px-2 active:opacity-70">
-                    <CalendarIcon size={13} color={colors.textMuted} />
-                    <Text style={{ color: colors.textMuted }} className="ml-1 text-[11px] font-medium">
-                      {formatDate(date.toISOString(), language)}
-                    </Text>
-                  </Pressable>
-                )}
               </View>
-
-              {/* Quick Commit button (only shown when adding a new record) */}
-              {!editingRecordId && (text.trim().length > 0 || files.length > 0) && (
-                <Pressable
-                  onPress={() => saveCurrentInput(false)}
-                  hitSlop={6}
-                  style={{ backgroundColor: colors.primary }}
-                  className="h-8.5 flex-row items-center rounded-xl px-3 active:opacity-80 shadow-sm">
-                  <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
-                  <Text className="ml-1 text-[12px] font-bold text-white">
-                    Əlavə et
-                  </Text>
-                </Pressable>
-              )}
             </View>
           </Card>
 
