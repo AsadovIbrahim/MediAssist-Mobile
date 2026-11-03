@@ -708,6 +708,58 @@ function detectKind(text: string, fallback?: RecordKind): RecordKind {
   return fallback ?? 'complaint';
 }
 
+export function isDefaultOrGenericRecordTitle(title?: string | null, kind?: RecordKind): boolean {
+  if (!title) return true;
+  const trimmed = title.trim();
+  if (!trimmed) return true;
+
+  if (
+    FILE_SUFFIX_REGEX.test(trimmed) ||
+    VOICE_SUFFIX_REGEX.test(trimmed) ||
+    RECORD_SUFFIX_REGEX.test(trimmed)
+  ) {
+    return true;
+  }
+
+  const low = trimmed.toLowerCase();
+  const genericWords = [
+    'şikayət',
+    'diaqnoz',
+    'müayinə',
+    'müalicə',
+    'complaint',
+    'diagnosis',
+    'examination',
+    'treatment',
+    'жалоба',
+    'диагноз',
+    'обследование',
+    'лечение',
+  ];
+
+  if (genericWords.includes(low)) {
+    return true;
+  }
+
+  if (
+    low.includes('(fayllı)') ||
+    low.includes('(with files)') ||
+    low.includes('(с файлами)') ||
+    low.includes('(səs qeydi)') ||
+    low.includes('(voice note)') ||
+    low.includes('(голосовая запись)') ||
+    low.endsWith('faylı') ||
+    low.endsWith('şəkli') ||
+    low.endsWith('səsi') ||
+    low.endsWith('sənədi') ||
+    low.endsWith('qeydi')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function localizeRecordTitle(
   title: string,
   kind?: RecordKind,

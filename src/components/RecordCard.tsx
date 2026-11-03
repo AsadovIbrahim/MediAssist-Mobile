@@ -6,6 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   getRecordConfig,
+  isDefaultOrGenericRecordTitle,
   localizeRecordTitle,
   recordVisual,
   splitFiles,
@@ -40,6 +41,11 @@ export function RecordCard({
   const { colors, isDark } = useTheme();
   const { icon, tint } = recordVisual(kind, item);
   const { images, audios, docs } = splitFiles(item.files);
+  const hasFiles = images.length > 0 || audios.length > 0 || docs.length > 0;
+  const isGenericTitle = isDefaultOrGenericRecordTitle(item.title, kind);
+  // Hide title if this is a file record with a generic default title
+  const showTitle = hasFiles ? !isGenericTitle : true;
+
   const isSameAsTitle =
     !item.description ||
     item.description.trim().toLowerCase() === item.title.trim().toLowerCase();
@@ -70,10 +76,15 @@ export function RecordCard({
 
       <IconTile icon={icon} tint={tint} size={52} iconSize={26} variant="soft" />
       <View className="ml-3.5 flex-1">
-        <Text style={{ color: colors.text }} className="text-[17px] font-bold" numberOfLines={1}>
-          {localizeRecordTitle(item.title, kind, t)}
-        </Text>
-        <Text style={{ color: colors.textMuted }} className="mt-1 text-[14px] font-medium" numberOfLines={1}>
+        {showTitle && (
+          <Text style={{ color: colors.text }} className="text-[17px] font-bold" numberOfLines={1}>
+            {localizeRecordTitle(item.title, kind, t)}
+          </Text>
+        )}
+        <Text
+          style={{ color: showTitle ? colors.textMuted : colors.text }}
+          className={showTitle ? 'mt-1 text-[14px] font-medium' : 'text-[15px] font-semibold'}
+          numberOfLines={1}>
           {patientName ? `${patientName} • ` : ''}{formatDate(item.date, language)}
         </Text>
 
@@ -83,15 +94,23 @@ export function RecordCard({
           </Text>
         )}
         {images.length > 0 && (
-          <ImageStrip
-            files={images}
-            wideSingle={kind === 'treatment' && item.kind === 'Prescription'}
-          />
+          <View className={showTitle ? '' : 'mt-1.5'}>
+            <ImageStrip
+              files={images}
+              wideSingle={kind === 'treatment' && item.kind === 'Prescription'}
+            />
+          </View>
         )}
         {audios.length > 0 && (
-          <VoicePlayer uri={fileUrl(audios[0].filePath)} fallbackLabel={formatSize(audios[0].fileSize)} />
+          <View className={showTitle ? '' : 'mt-1.5'}>
+            <VoicePlayer uri={fileUrl(audios[0].filePath)} fallbackLabel={formatSize(audios[0].fileSize)} />
+          </View>
         )}
-        {docs.length > 0 && !images.length && <FileBadge file={docs[0]} />}
+        {docs.length > 0 && !images.length && (
+          <View className={showTitle ? '' : 'mt-1.5'}>
+            <FileBadge file={docs[0]} />
+          </View>
+        )}
       </View>
 
       {!selectionMode && (
