@@ -27,7 +27,7 @@ import { fileUrl } from '../api/client';
 import { diagnosesApi, patientsApi } from '../api/services';
 import { ImageViewer } from '../components/media';
 import { OfflineBanner } from '../components/OfflineBanner';
-import { Button, CountBadge, EmptyState, ErrorBanner, IconTile } from '../components/ui';
+import { Button, EmptyState, ErrorBanner, IconTile } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 import { patientFullName, usePatient } from '../context/PatientContext';
 import { useTheme } from '../context/ThemeContext';
@@ -303,7 +303,6 @@ export function PatientDashboardScreen() {
                     {r.subtitle}
                   </Text>
                 </View>
-                <CountBadge count={r.count} tint={r.tint} />
                 <ChevronRight
                   size={22}
                   color={colors.textLight}
