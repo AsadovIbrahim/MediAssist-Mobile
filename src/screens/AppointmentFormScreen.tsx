@@ -6,7 +6,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Calendar } from 'lucide-react-native';
+import { Calendar, Trash2 } from 'lucide-react-native';
 import { appointmentsApi } from '../api/services';
 import type { AppointmentType } from '../api/types';
 import { DatePickerModal } from '../components/DatePickerModal';
@@ -73,6 +73,7 @@ export function AppointmentFormScreen({
   const [notes, setNotes] = useState(editing?.notes ?? '');
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     requestNotificationPermission();
@@ -87,6 +88,34 @@ export function AppointmentFormScreen({
     ) {
       setTitle(next === 'LabTest' ? t('appointment.labTest') : t('appointment.doctorVisit'));
     }
+  };
+
+  const onDelete = () => {
+    if (!editing) return;
+    Alert.alert(
+      t('common.delete') || 'Sil',
+      'Bu görüş və ya müayinəni silmək istədiyinizə əminsiniz?',
+      [
+        { text: t('common.cancel') || 'Ləğv et', style: 'cancel' },
+        {
+          text: t('common.delete') || 'Sil',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await cancelAppointmentNotification(editing.id);
+              await appointmentsApi.remove(editing.id);
+              await refreshPatients();
+              navigation.goBack();
+            } catch (err: any) {
+              Alert.alert(t('common.error'), err?.message || 'Silinmə zamanı xəta baş verdi');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const onSave = async () => {
@@ -169,6 +198,18 @@ export function AppointmentFormScreen({
     <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScreenHeader
         title={isEditing ? t('appointment.editAppointment') : t('appointment.newAppointment')}
+        right={
+          isEditing ? (
+            <Pressable
+              onPress={onDelete}
+              hitSlop={10}
+              disabled={deleting || saving}
+              style={{ backgroundColor: colors.dangerSoft }}
+              className="h-10 w-10 items-center justify-center rounded-xl active:opacity-70">
+              <Trash2 size={19} color={colors.danger} />
+            </Pressable>
+          ) : undefined
+        }
       />
 
       <KeyboardScrollView className="flex-1 px-4 pt-2">
@@ -230,13 +271,26 @@ export function AppointmentFormScreen({
           onChangeText={setNotes}
         />
 
-        <View className="mt-2 mb-8">
+        <View className="mt-2 mb-8 gap-3">
           <Button
             label={t('common.save')}
             size="lg"
             loading={saving}
+            disabled={deleting}
             onPress={onSave}
           />
+
+          {isEditing && (
+            <Button
+              label={t('common.delete') || 'Sil'}
+              variant="danger"
+              size="lg"
+              icon={Trash2}
+              loading={deleting}
+              disabled={saving}
+              onPress={onDelete}
+            />
+          )}
         </View>
       </KeyboardScrollView>
 

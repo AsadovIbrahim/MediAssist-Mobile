@@ -14,7 +14,6 @@ import {
   FileText,
   FlaskConical,
   Home,
-  MessageCircle,
   MoreVertical,
   Search,
   Stethoscope,
@@ -296,22 +295,6 @@ export function CalendarScreen({ navigation, route }: RootScreenProps<'Calendar'
                     </Text>
                   )}
                 </View>
-                {!!p?.phone && (
-                  <Pressable
-                    onPress={() => {
-                      const timeStr = formatTime(item.dateTime);
-                      const dateStr = formatDate(item.dateTime, language);
-                      const pName = `${p.firstName} ${p.lastName}`.trim();
-                      const msg = `Salam ${pName}, MediAssist-dən xatırladırıq: ${dateStr} tarixində saat ${timeStr}-da həkim qəbulunuz var.`;
-                      openWhatsApp(p.phone, msg);
-                    }}
-                    hitSlop={8}
-                    accessibilityLabel="WhatsApp ilə xatırlat"
-                    style={{ backgroundColor: '#25D366' }}
-                    className="mr-2 h-9 w-9 items-center justify-center rounded-xl active:opacity-75 shadow-sm">
-                    <MessageCircle size={17} color="#FFFFFF" />
-                  </Pressable>
-                )}
                 <Pressable
                   onPress={() => onMenu(item)}
                   hitSlop={12}
