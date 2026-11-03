@@ -22,4 +22,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
       completionHandler([.alert, .sound, .badge])
     }
   }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let urlString = (response.notification.request.content.userInfo["url"] as? String) ?? "mediassist://calendar"
+    if let url = URL(string: urlString) {
+      DispatchQueue.main.async {
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+      }
+    }
+    completionHandler()
+  }
 }

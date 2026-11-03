@@ -35,7 +35,14 @@ class SceneDelegate: RCTDefaultReactNativeFactoryDelegate, UIWindowSceneDelegate
       connectionOptions: connectionOptions
     )
 
-   
+    if let response = connectionOptions.notificationResponse {
+      let urlStr = (response.notification.request.content.userInfo["url"] as? String) ?? "mediassist://calendar"
+      if let url = URL(string: urlStr) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+          UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        }
+      }
+    }
   }
 
   func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
