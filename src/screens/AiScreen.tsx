@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Alert,
@@ -44,13 +45,48 @@ export function AiScreen() {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
 
-  const prevLangRef = useRef(language);
+  const chatStorageKey = `mediassist.ai.chat.${patient?.id || 'general'}`;
+  const isLoadedRef = useRef(false);
+
+  // Load chat history for current patient
   useEffect(() => {
-    if (prevLangRef.current !== language) {
-      prevLangRef.current = language;
-      setMessages([]);
-    }
-  }, [language]);
+    isLoadedRef.current = false;
+    let active = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(chatStorageKey);
+        if (raw && active) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setMessages(parsed);
+            isLoadedRef.current = true;
+            return;
+          }
+        }
+      } catch {}
+      if (active) {
+        setMessages([]);
+        isLoadedRef.current = true;
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [chatStorageKey]);
+
+  // Persist chat messages whenever they change
+  useEffect(() => {
+    if (!isLoadedRef.current) return;
+    (async () => {
+      try {
+        if (messages.length > 0) {
+          await AsyncStorage.setItem(chatStorageKey, JSON.stringify(messages));
+        } else {
+          await AsyncStorage.removeItem(chatStorageKey);
+        }
+      } catch {}
+    })();
+  }, [messages, chatStorageKey]);
 
   const scrollRef = useRef<ScrollNode>(null);
 
@@ -173,7 +209,12 @@ export function AiScreen() {
         {
           text: t('common.delete'),
           style: 'destructive',
-          onPress: () => setMessages([]),
+          onPress: async () => {
+            setMessages([]);
+            try {
+              await AsyncStorage.removeItem(chatStorageKey);
+            } catch {}
+          },
         },
       ],
     );
