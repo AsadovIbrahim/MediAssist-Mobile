@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -146,66 +145,43 @@ export function CalendarScreen({ navigation, route }: RootScreenProps<'Calendar'
     [appointments, selected],
   );
 
-  const openWhatsApp = (phone: string, text: string) => {
-    const cleanPhone = phone.replace(/[^\d+]/g, '').replace('+', '');
-    const url = `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
-    Linking.canOpenURL(url)
-      .then(supported => {
-        if (supported) {
-          Linking.openURL(url);
-        } else {
-          Linking.openURL(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`);
-        }
-      })
-      .catch(() => {
-        Linking.openURL(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`);
-      });
-  };
-
   const onMenu = (item: Appointment) => {
-    const p = patients.find(pat => pat.id === item.patientId);
-    const pPhone = p?.phone;
-
-    const buttons: any[] = [
-      { text: t('common.close'), style: 'cancel' },
-    ];
-
-    if (pPhone) {
-      buttons.push({
-        text: '💬 WhatsApp ilə xatırlat',
-        onPress: () => {
-          const timeStr = formatTime(item.dateTime);
-          const dateStr = formatDate(item.dateTime, language);
-          const pName = p ? `${p.firstName} ${p.lastName}`.trim() : 'Pasiyent';
-          const msg = `Salam ${pName}, MediAssist-dən xatırladırıq: ${dateStr} tarixində saat ${timeStr}-da həkim qəbulunuz var.`;
-          openWhatsApp(pPhone, msg);
-        },
-      });
-    }
-
-    buttons.push({
-      text: t('common.edit'),
-      onPress: () => navigation.navigate('AppointmentForm', { appointment: item }),
-    });
-
-    buttons.push({
-      text: t('common.delete'),
-      style: 'destructive',
-      onPress: async () => {
-        try {
-          await cancelAppointmentNotification(item.id);
-          await appointmentsApi.remove(item.id);
-          await reload();
-        } catch (e) {
-          Alert.alert(t('common.error'), (e as Error).message);
-        }
-      },
-    });
-
     Alert.alert(
       localizeAppointmentTitle(item.title, t),
       `${formatDate(item.dateTime, language)} • ${formatTime(item.dateTime)}`,
-      buttons,
+      [
+        { text: t('common.close') || 'Ləğv et', style: 'cancel' },
+        {
+          text: t('common.edit') || 'Düzəliş et',
+          onPress: () => navigation.navigate('AppointmentForm', { appointment: item }),
+        },
+        {
+          text: t('common.delete') || 'Sil',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              t('common.delete') || 'Sil',
+              'Bu görüş və ya müayinəni silmək istədiyinizə əminsiniz?',
+              [
+                { text: t('common.cancel') || 'Ləğv et', style: 'cancel' },
+                {
+                  text: t('common.delete') || 'Sil',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await cancelAppointmentNotification(item.id);
+                      await appointmentsApi.remove(item.id);
+                      await reload();
+                    } catch (e: any) {
+                      Alert.alert(t('common.error'), e?.message || 'Xəta baş verdi');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
     );
   };
 
@@ -271,11 +247,6 @@ export function CalendarScreen({ navigation, route }: RootScreenProps<'Calendar'
                 : item.type === 'Other'
                   ? { icon: CalendarIcon, tint: 'green' }
                   : { icon: Stethoscope, tint: 'blue' };
-            const p = patients.find(pat => pat.id === item.patientId);
-            const pName = p ? `${p.firstName} ${p.lastName}`.trim() : '';
-            const extra = item.location || item.doctorSpecialty || item.notes || item.doctorName || '';
-            const subtitle = [pName, extra].filter(Boolean).join(' • ');
-
             return (
               <Card
                 key={item.id}
@@ -285,15 +256,10 @@ export function CalendarScreen({ navigation, route }: RootScreenProps<'Calendar'
                   {formatTime(item.dateTime)}
                 </Text>
                 <IconTile icon={visual.icon} tint={visual.tint} size={50} iconSize={24} variant="soft" />
-                <View className="ml-3.5 flex-1">
+                <View className="ml-3.5 flex-1 justify-center">
                   <Text style={{ color: colors.text }} className="text-[17px] font-bold" numberOfLines={1}>
                     {localizeAppointmentTitle(item.title, t)}
                   </Text>
-                  {!!subtitle && (
-                    <Text style={{ color: colors.textMuted }} className="mt-1 text-[14px] font-medium" numberOfLines={1}>
-                      {subtitle}
-                    </Text>
-                  )}
                 </View>
                 <Pressable
                   onPress={() => onMenu(item)}
