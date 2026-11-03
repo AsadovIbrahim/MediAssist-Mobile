@@ -251,13 +251,15 @@ export function CalendarScreen({ navigation, route }: RootScreenProps<'Calendar'
               <Card
                 key={item.id}
                 onPress={() => navigation.navigate('AppointmentForm', { appointment: item })}
-                className="mx-4 mb-3.5 flex-row items-center px-4 py-4">
-                <Text style={{ color: colors.text }} className="w-16 text-[16px] font-bold">
+                className="mx-4 mb-3.5 flex-row items-center px-4 py-3.5">
+                <Text style={{ color: colors.text }} className="w-[48px] text-[15px] font-bold">
                   {formatTime(item.dateTime)}
                 </Text>
-                <IconTile icon={visual.icon} tint={visual.tint} size={50} iconSize={24} variant="soft" />
-                <View className="ml-3.5 flex-1 justify-center">
-                  <Text style={{ color: colors.text }} className="text-[17px] font-bold" numberOfLines={1}>
+                <View className="mx-2.5">
+                  <IconTile icon={visual.icon} tint={visual.tint} size={36} iconSize={20} variant="soft" />
+                </View>
+                <View className="flex-1 justify-center">
+                  <Text style={{ color: colors.text }} className="text-[16px] font-bold" numberOfLines={1}>
                     {localizeAppointmentTitle(item.title, t)}
                   </Text>
                 </View>
