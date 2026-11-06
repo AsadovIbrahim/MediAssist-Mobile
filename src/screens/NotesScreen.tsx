@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   Dimensions,
   Keyboard,
   KeyboardAvoidingView,
@@ -51,7 +52,7 @@ import {
 import type { RootScreenProps } from '../navigation/types';
 
 const STORAGE_KEY = 'mediassist.doctor.scratchpad';
-const CUSTOM_COLORS_KEY = 'mediassist.doctor.custom_colors';
+export const CUSTOM_COLORS_KEY = 'mediassist.doctor.custom_colors';
 
 export type PaperStyle = 'plain' | 'grid' | 'lined' | 'dots';
 export type DrawTool = 'pen' | 'highlighter' | 'eraser';
@@ -84,7 +85,7 @@ interface StoredNotesEnvelope {
   files?: LocalFile[];
 }
 
-const DRAW_COLORS = [
+export const DRAW_COLORS = [
   '#3B82F6', // Electric Blue
   '#EF4444', // Crimson Red
   '#10B981', // Emerald Green
@@ -163,14 +164,14 @@ function hexToHsv(hex: string): { h: number; s: number; v: number } {
   return { h, s, v };
 }
 
-const BRUSH_SIZES = [
+export const BRUSH_SIZES = [
   { label: 'İncə', size: 2.5 },
   { label: 'Orta', size: 5 },
   { label: 'Qalın', size: 9 },
   { label: 'Fırça', size: 16 },
 ];
 
-const CANVAS_HEIGHT = 400;
+export const CANVAS_HEIGHT = 400;
 
 function formatShortMonthDay(isoOrMs: string | number): string {
   const d = new Date(isoOrMs);
@@ -276,7 +277,7 @@ async function readLocalNotes(): Promise<StoredNotesEnvelope> {
   return { notes: [], updatedAt: 0, dirty: false };
 }
 
-function pointsToSvgPath(points: Array<{ x: number; y: number }>): string {
+export function pointsToSvgPath(points: Array<{ x: number; y: number }>): string {
   if (points.length === 0) return '';
   if (points.length === 1) {
     const p = points[0];
@@ -374,7 +375,7 @@ export function NotesScreen({ navigation }: RootScreenProps<'Notes'>) {
   const syncingRef = useRef(false);
   const syncQueuedRef = useRef(false);
 
-  // Refs for live drawing PanResponder
+  // Refs for live drawing PanResponder & instant auto-save
   const pointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const drawToolRef = useRef<DrawTool>(drawTool);
   drawToolRef.current = drawTool;
@@ -384,6 +385,19 @@ export function NotesScreen({ navigation }: RootScreenProps<'Notes'>) {
   brushSizeRef.current = brushSize;
   const noteStrokesRef = useRef<DrawingStroke[]>(noteStrokes);
   noteStrokesRef.current = noteStrokes;
+
+  const activeNoteIdRef = useRef<string | null>(activeNoteId);
+  activeNoteIdRef.current = activeNoteId;
+  const isNewDraftRef = useRef<boolean>(isNewDraft);
+  isNewDraftRef.current = isNewDraft;
+  const noteTitleRef = useRef<string>(noteTitle);
+  noteTitleRef.current = noteTitle;
+  const noteTextRef = useRef<string>(noteText);
+  noteTextRef.current = noteText;
+  const noteFilesRef = useRef<LocalFile[]>(noteFiles);
+  noteFilesRef.current = noteFiles;
+  const paperStyleRef = useRef<PaperStyle>(paperStyle);
+  paperStyleRef.current = paperStyle;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -544,44 +558,60 @@ export function NotesScreen({ navigation }: RootScreenProps<'Notes'>) {
   const openExistingNote = (note: DoctorNote) => {
     setActiveNoteId(note.id);
     setIsNewDraft(false);
-    setNoteTitle(note.title);
+    const firstLine = (note.text ?? '').trim().split('\n')[0].trim();
+    const autoLineTitle = firstLine
+      ? firstLine.length > 36
+        ? `${firstLine.slice(0, 34)}...`
+        : firstLine
+      : '';
+    const isDefaultAutoTitle =
+      note.title === autoLineTitle ||
+      /^(Mətn qeydi|Rəsm qeydi|Text note|Drawing note|Заметка|Рисунок)\s+\d{2}\/\d{2}$/.test(
+        note.title,
+      );
+    setNoteTitle(isDefaultAutoTitle ? '' : note.title);
     setNoteText(note.text);
     setNoteFiles(note.files ?? []);
     setNoteStrokes(note.strokes ?? []);
     setRedoStrokes([]);
     setPaperStyle(note.paperStyle ?? 'grid');
-    setDrawingMode((note.strokes?.length ?? 0) > 0 && !note.text.trim() && (note.files?.length ?? 0) === 0);
+    setDrawingMode(
+      (note.strokes?.length ?? 0) > 0 && !note.text.trim() && (note.files?.length ?? 0) === 0,
+    );
     setDrawTool('pen');
   };
 
-  // Save current note & return to All Notes grid
-  const saveAndCloseEditor = async () => {
-    if (!activeNoteId) return;
-    Keyboard.dismiss();
+  // Core helper that builds & saves the current editor note using live refs
+  const commitActiveNote = useCallback(async () => {
+    const currentId = activeNoteIdRef.current;
+    if (!currentId) return;
 
-    const trimmedTitle = noteTitle.trim();
-    const trimmedText = noteText.trim();
+    const currentTitle = noteTitleRef.current.trim();
+    const currentText = noteTextRef.current;
+    const trimmedText = currentText.trim();
+    const currentFiles = noteFilesRef.current;
+    const currentStrokes = noteStrokesRef.current;
+    const currentPaper = paperStyleRef.current;
+
     const hasContent =
-      trimmedTitle.length > 0 ||
+      currentTitle.length > 0 ||
       trimmedText.length > 0 ||
-      noteFiles.length > 0 ||
-      noteStrokes.length > 0;
+      currentFiles.length > 0 ||
+      currentStrokes.length > 0;
 
     if (!hasContent) {
-      if (!isNewDraft) {
-        const remaining = stateRef.current.notes.filter(n => n.id !== activeNoteId);
+      if (!isNewDraftRef.current) {
+        const remaining = stateRef.current.notes.filter(n => n.id !== currentId);
         await persistNotes(remaining);
       }
-      setActiveNoteId(null);
-      setDrawingMode(false);
       return;
     }
 
     const now = Date.now();
-    const existing = stateRef.current.notes.find(n => n.id === activeNoteId);
+    const existing = stateRef.current.notes.find(n => n.id === currentId);
     const firstLine = trimmedText.split('\n')[0].trim();
     const defaultPrefix =
-      noteStrokes.length > 0 && !trimmedText
+      currentStrokes.length > 0 && !trimmedText
         ? language === 'ru'
           ? 'Рисунок'
           : language === 'en'
@@ -594,26 +624,83 @@ export function NotesScreen({ navigation }: RootScreenProps<'Notes'>) {
         : 'Mətn qeydi';
 
     const resolvedTitle =
-      trimmedTitle ||
+      currentTitle ||
       (firstLine ? (firstLine.length > 36 ? `${firstLine.slice(0, 34)}...` : firstLine) : '') ||
       `${defaultPrefix} ${formatShortMonthDay(now)}`;
 
+    if (
+      existing &&
+      existing.title === resolvedTitle &&
+      existing.text === currentText &&
+      (existing.paperStyle ?? 'grid') === currentPaper &&
+      JSON.stringify(existing.files ?? []) === JSON.stringify(currentFiles) &&
+      JSON.stringify(existing.strokes ?? []) === JSON.stringify(currentStrokes)
+    ) {
+      return;
+    }
+
     const savedNote: DoctorNote = {
-      id: activeNoteId,
+      id: currentId,
       title: resolvedTitle,
-      text: noteText,
-      files: noteFiles,
-      strokes: noteStrokes,
-      paperStyle,
+      text: currentText,
+      files: currentFiles,
+      strokes: currentStrokes,
+      paperStyle: currentPaper,
       createdAt: existing?.createdAt ?? new Date(now).toISOString(),
       updatedAt: now,
     };
 
-    const others = stateRef.current.notes.filter(n => n.id !== activeNoteId);
+    const others = stateRef.current.notes.filter(n => n.id !== currentId);
     await persistNotes([savedNote, ...others]);
+  }, [language, persistNotes]);
+
+  // Live auto-save while editing so changes are never lost even if user exits unexpectedly
+  useEffect(() => {
+    if (!activeNoteId) return;
+    const timer = setTimeout(() => {
+      commitActiveNote().catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [activeNoteId, noteTitle, noteText, noteFiles, noteStrokes, paperStyle, commitActiveNote]);
+
+  // Save current note & return to All Notes grid
+  const saveAndCloseEditor = useCallback(async () => {
+    if (!activeNoteIdRef.current) return;
+    Keyboard.dismiss();
+    await commitActiveNote();
+    activeNoteIdRef.current = null;
     setActiveNoteId(null);
     setDrawingMode(false);
-  };
+  }, [commitActiveNote]);
+
+  // Intercept Android Hardware Back & iOS/Android swipe-back while inside Note Editor
+  useEffect(() => {
+    const onHardwareBack = () => {
+      if (activeNoteIdRef.current !== null) {
+        saveAndCloseEditor().catch(() => {});
+        return true;
+      }
+      if (selectionMode) {
+        setSelectionMode(false);
+        setSelectedIds(new Set());
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+    return () => sub.remove();
+  }, [saveAndCloseEditor, selectionMode]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', e => {
+      if (activeNoteIdRef.current !== null) {
+        // Intercept back gesture: save note & return to "All notes" grid instead of leaving NotesScreen
+        e.preventDefault();
+        saveAndCloseEditor().catch(() => {});
+      }
+    });
+    return unsubscribe;
+  }, [navigation, saveAndCloseEditor]);
 
   // PanResponder for smooth freehand SVG drawing / erasing (iOS & Android safe)
   const finishCurrentStroke = useCallback(() => {
@@ -1604,7 +1691,7 @@ export function NotesScreen({ navigation }: RootScreenProps<'Notes'>) {
 /**
  * Renders notebook paper background lines/grid/dots inside the SVG drawing canvas.
  */
-function PaperBackground({
+export function PaperBackground({
   width,
   height,
   style,
@@ -1698,7 +1785,7 @@ function PaperBackground({
 /**
  * Interactive 2D HSV Spectrum + Hue Slider + Extended Swatches + Hex Custom Color Picker Modal
  */
-function CustomColorPickerModal({
+export function CustomColorPickerModal({
   visible,
   initialColor,
   isDark,

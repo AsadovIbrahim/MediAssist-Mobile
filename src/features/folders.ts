@@ -7,6 +7,16 @@ import {
   workspaceServerStore,
 } from './doctorWorkspace';
 
+export type FolderPaperStyle = 'plain' | 'grid' | 'lined' | 'dots';
+
+export interface FolderDrawingStroke {
+  id: string;
+  d: string;
+  color: string;
+  width: number;
+  opacity?: number;
+}
+
 /**
  * Doctor's personal, hierarchical folders (synced with the server + cached locally).
  * Each folder can contain sub-folders and attachments (images, voice notes, documents).
@@ -18,6 +28,8 @@ export interface DoctorFolder {
   createdAt: string;
   text?: string;
   files: LocalFile[];
+  strokes?: FolderDrawingStroke[];
+  paperStyle?: FolderPaperStyle;
 }
 
 interface FoldersEnvelope {
@@ -319,6 +331,21 @@ export async function deleteFolders(ids: string[]) {
 /** Deletes the folder together with all of its nested sub-folders and server files. */
 export async function deleteFolder(id: string) {
   await deleteFolders([id]);
+}
+
+export async function setFolderDrawing(
+  id: string,
+  strokes: FolderDrawingStroke[],
+  paperStyle?: FolderPaperStyle,
+) {
+  const all = await loadFolders(false);
+  await persist(
+    all.map(f =>
+      f.id === id
+        ? { ...f, strokes, paperStyle: paperStyle ?? f.paperStyle ?? 'grid' }
+        : f,
+    ),
+  );
 }
 
 export async function setFolderFiles(id: string, files: LocalFile[]) {

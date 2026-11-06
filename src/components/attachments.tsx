@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Image, Linking, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Linking, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Camera,
@@ -194,15 +194,18 @@ export interface ToolbarAction {
 export function AttachmentToolbar({
   onAdd,
   leading,
+  secondaryLeading,
 }: {
   onAdd: (files: LocalFile[]) => void;
   leading?: ToolbarAction;
+  secondaryLeading?: ToolbarAction;
 }) {
   const insets = useSafeAreaInsets();
   const { keyboardHeight } = useKeyboard();
-  const { colors } = useTheme();
-  const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
+  const { t, language } = useLanguage();
   const [recorderVisible, setRecorderVisible] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(false);
 
   const add = (picked: LocalFile[]) => {
     if (picked.length > 0) {
@@ -210,7 +213,46 @@ export function AttachmentToolbar({
     }
   };
 
+  // Close the sheet first, then launch the native picker (iOS cannot present
+  // a picker while another modal is still animating out).
+  const runAfterSheetClose = (action: () => void | Promise<void>) => {
+    setSheetVisible(false);
+    setTimeout(() => {
+      Promise.resolve(action()).catch(() => {});
+    }, 350);
+  };
+
   const bottomPad = keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 10);
+
+  const sheetOptions: Array<{
+    key: string;
+    icon: LucideIcon;
+    label: string;
+    bg: string;
+    onPress: () => void;
+  }> = [
+    {
+      key: 'camera',
+      icon: Camera,
+      label: t('form.camera'),
+      bg: '#3B82F6',
+      onPress: () => runAfterSheetClose(async () => add(await takePhoto())),
+    },
+    {
+      key: 'gallery',
+      icon: ImageIcon,
+      label: t('record.filterImages'),
+      bg: '#A855F7',
+      onPress: () => runAfterSheetClose(async () => add(await pickImages())),
+    },
+    {
+      key: 'document',
+      icon: FileText,
+      label: t('record.addFile'),
+      bg: '#F97316',
+      onPress: () => runAfterSheetClose(async () => add(await pickDocuments())),
+    },
+  ];
 
   return (
     <>
@@ -223,22 +265,11 @@ export function AttachmentToolbar({
         }}
         className="flex-row items-center justify-around border-t px-4">
         {leading && <ToolbarButton {...leading} color={colors.primary} />}
-        <ToolbarButton
-          icon={Camera}
-          label={t('form.camera')}
-          onPress={async () => add(await takePhoto())}
-          color={colors.primary}
-        />
-        <ToolbarButton
-          icon={ImageIcon}
-          label={t('record.filterImages')}
-          onPress={async () => add(await pickImages())}
-          color={colors.primary}
-        />
+        {secondaryLeading && <ToolbarButton {...secondaryLeading} color={colors.primary} />}
         <ToolbarButton
           icon={Paperclip}
-          label={t('record.addFile')}
-          onPress={async () => add(await pickDocuments())}
+          label={language === 'ru' ? 'Прикрепить' : language === 'en' ? 'Attach' : 'Əlavə et'}
+          onPress={() => setSheetVisible(true)}
           color={colors.primary}
         />
         <ToolbarButton
@@ -248,6 +279,70 @@ export function AttachmentToolbar({
           color={colors.primary}
         />
       </View>
+
+      {/* Attachment bottom sheet (WhatsApp / Telegram / Samsung Notes style) */}
+      <Modal
+        visible={sheetVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setSheetVisible(false)}>
+        <Pressable onPress={() => setSheetVisible(false)} className="flex-1 justify-end bg-black/50">
+          <Pressable
+            onPress={e => e.stopPropagation()}
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 16) + 8,
+            }}
+            className="rounded-t-3xl border-t px-5 pt-3">
+            {/* Grab handle */}
+            <View
+              style={{ backgroundColor: isDark ? '#475569' : '#CBD5E1' }}
+              className="mb-4 h-1.5 w-10 self-center rounded-full"
+            />
+
+            <Text style={{ color: colors.text }} className="mb-5 px-1 text-[17px] font-bold">
+              {language === 'ru' ? 'Прикрепить' : language === 'en' ? 'Attach' : 'Əlavə et'}
+            </Text>
+
+            <View className="mb-5 flex-row justify-around">
+              {sheetOptions.map(opt => {
+                const Icon = opt.icon;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={opt.onPress}
+                    accessibilityRole="button"
+                    accessibilityLabel={opt.label}
+                    className="w-24 items-center active:opacity-70">
+                    <View
+                      style={{ backgroundColor: opt.bg }}
+                      className="h-16 w-16 items-center justify-center rounded-full">
+                      <Icon size={28} color="#FFFFFF" strokeWidth={2} />
+                    </View>
+                    <Text
+                      style={{ color: colors.text }}
+                      className="mt-2 text-center text-[13px] font-semibold"
+                      numberOfLines={1}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable
+              onPress={() => setSheetVisible(false)}
+              style={{ backgroundColor: colors.field }}
+              className="items-center justify-center rounded-2xl py-3.5 active:opacity-75">
+              <Text style={{ color: colors.textMuted }} className="text-[15px] font-bold">
+                {t('common.cancel')}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <RecorderModal
         visible={recorderVisible}
