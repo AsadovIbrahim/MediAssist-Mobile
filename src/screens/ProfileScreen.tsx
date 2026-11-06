@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   Switch,
   Text,
   TextInput,
@@ -378,8 +381,12 @@ export function ProfileScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => setShowPasswordModal(false)}>
-        <View className="flex-1 justify-end bg-black/50">
-          <View style={{ backgroundColor: colors.surface }} className="rounded-t-3xl p-6 shadow-2xl">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 justify-end bg-black/50">
+          <View
+            style={{ backgroundColor: colors.surface, maxHeight: '88%' }}
+            className="rounded-t-3xl p-6 shadow-2xl">
             <View style={{ borderBottomColor: colors.border }} className="flex-row items-center justify-between pb-3 border-b">
               <Text style={{ color: colors.text }} className="text-[20px] font-bold">{t('password.modalTitle')}</Text>
               <Pressable
@@ -391,7 +398,10 @@ export function ProfileScreen() {
               </Pressable>
             </View>
 
-            <View className="mt-4">
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              className="mt-4">
               {/* Old password */}
               <Text style={{ color: colors.text }} className="mb-1.5 text-[14px] font-bold">{t('password.old')}</Text>
               <View
@@ -466,9 +476,9 @@ export function ProfileScreen() {
                 size="lg"
                 onPress={handleDirectPasswordChange}
               />
-            </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ------------------------------------------------------------- */}

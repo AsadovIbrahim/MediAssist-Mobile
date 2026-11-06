@@ -82,7 +82,8 @@ export function KeyboardScrollView({
         if (!h && !y) {
           return;
         }
-        const limit = kbTop - 28;
+        const navOffset = Platform.OS === 'android' ? insets.bottom : 0;
+        const limit = kbTop - navOffset - 28;
         const bottom = y + Math.min(h, 160);
         if (bottom > limit) {
           const delta = bottom - limit;
@@ -93,7 +94,7 @@ export function KeyboardScrollView({
         }
       });
     },
-    [keyboardTopY],
+    [keyboardTopY, insets.bottom],
   );
 
   // When the keyboard opens, scroll the currently focused field above it.
@@ -115,7 +116,11 @@ export function KeyboardScrollView({
   );
 
   const extraBottom =
-    keyboardHeight > 0 ? Math.max(24, keyboardHeight - insets.bottom + 24) : 32;
+    keyboardHeight > 0
+      ? Platform.OS === 'android'
+        ? keyboardHeight + insets.bottom + 36
+        : Math.max(24, keyboardHeight - insets.bottom + 24)
+      : 32;
 
   return (
     <ScrollEnsureContext.Provider value={registerFocus}>
@@ -155,7 +160,11 @@ export function KeyboardLiftView({
   const { keyboardHeight } = useKeyboard();
   const bottomOffset =
     keyboardHeight > 0
-      ? fullBottom
+      ? Platform.OS === 'android'
+        ? fullBottom
+          ? keyboardHeight + insets.bottom
+          : keyboardHeight
+        : fullBottom
         ? keyboardHeight
         : Math.max(0, keyboardHeight - insets.bottom)
       : 0;

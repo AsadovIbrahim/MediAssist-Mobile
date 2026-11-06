@@ -754,7 +754,7 @@ export function FolderScreen({ navigation, route }: RootScreenProps<'Folder'>) {
         }}
         onRequestClose={() => setDialog(null)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           className="flex-1 items-center justify-center bg-black/60 px-8">
           <View style={{ backgroundColor: colors.surface }} className="w-full rounded-2xl p-5">
             <Text style={{ color: colors.text }} className="mb-1 text-lg font-bold">

@@ -20,7 +20,7 @@ import {
   Sparkles,
   Stethoscope,
 } from 'lucide-react-native';
-import { Card, IconTile, KeyboardLiftView, Loading, ScreenHeader } from '../components/ui';
+import { Card, IconTile, KeyboardLiftView, Loading, ScreenHeader, useKeyboard } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 import { patientFullName, usePatient } from '../context/PatientContext';
 import { useTheme } from '../context/ThemeContext';
@@ -39,6 +39,7 @@ type ScrollNode = React.ComponentRef<typeof ScrollView>;
 
 export function AiScreen() {
   const insets = useSafeAreaInsets();
+  const { keyboardHeight } = useKeyboard();
   const { language, t } = useLanguage();
   const { patient } = usePatient();
   const { colors } = useTheme();
@@ -401,7 +402,7 @@ export function AiScreen() {
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
             paddingTop: 10,
-            paddingBottom: Math.max(insets.bottom, 10),
+            paddingBottom: keyboardHeight > 0 ? 10 : Math.max(insets.bottom, 10),
           }}
           className="flex-row items-center border-t px-4">
           <TextInput

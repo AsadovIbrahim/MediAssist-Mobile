@@ -3,8 +3,10 @@ import {
   Alert,
   Dimensions,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -1791,7 +1793,9 @@ function CustomColorPickerModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 items-center justify-center bg-black/65 px-5">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1 items-center justify-center bg-black/65 px-5">
         <View
           style={{ backgroundColor: colors.surface, borderColor: colors.border }}
           className="w-full max-w-md rounded-3xl border p-5 shadow-2xl">
@@ -1991,7 +1995,7 @@ function CustomColorPickerModal({
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
