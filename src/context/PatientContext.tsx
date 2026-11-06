@@ -91,6 +91,18 @@ export function usePatient() {
 }
 
 export function patientFullName(p: Pick<Patient, 'firstName' | 'lastName'> | null) {
-  return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+  if (!p) {
+    return '';
+  }
+  const last = p.lastName && p.lastName.trim() !== '-' ? p.lastName.trim() : '';
+  return `${p.firstName.trim()} ${last}`.trim();
+}
+
+export function patientDisplayPhone(phone: string | null | undefined): string {
+  if (!phone) {
+    return '';
+  }
+  const trimmed = phone.trim();
+  return trimmed === '-' ? '' : trimmed;
 }
 

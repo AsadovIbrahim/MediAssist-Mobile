@@ -9,10 +9,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Brain,
   FileText,
+  FlaskConical,
   Pill,
   RotateCcw,
   Send,
@@ -37,6 +38,7 @@ import { useFocusData } from '../utils/hooks';
 type ScrollNode = React.ComponentRef<typeof ScrollView>;
 
 export function AiScreen() {
+  const insets = useSafeAreaInsets();
   const { language, t } = useLanguage();
   const { patient } = usePatient();
   const { colors } = useTheme();
@@ -95,13 +97,14 @@ export function AiScreen() {
     if (!patient) {
       return null;
     }
-    const [complaints, diagnoses, treatments, appointments] = await Promise.all([
+    const [complaints, examinations, diagnoses, treatments, appointments] = await Promise.all([
       RECORDS.complaint.api.list(patient.id).catch(() => [] as RecordItem[]),
+      RECORDS.examination.api.list(patient.id).catch(() => [] as RecordItem[]),
       RECORDS.diagnosis.api.list(patient.id).catch(() => [] as RecordItem[]),
       RECORDS.treatment.api.list(patient.id).catch(() => [] as RecordItem[]),
       appointmentsApi.list(patient.id).catch(() => [] as Appointment[]),
     ]);
-    return { complaints, diagnoses, treatments, appointments };
+    return { complaints, examinations, diagnoses, treatments, appointments };
   }, [patient?.id]);
 
   const scrollToBottom = () => {
@@ -129,6 +132,7 @@ export function AiScreen() {
     scrollToBottom();
 
     const complaints: RecordItem[] = data?.complaints ?? [];
+    const examinations: RecordItem[] = data?.examinations ?? [];
     const diagnoses: RecordItem[] = data?.diagnoses ?? [];
     const treatments: RecordItem[] = data?.treatments ?? [];
     const appointments: Appointment[] = data?.appointments ?? [];
@@ -141,6 +145,14 @@ export function AiScreen() {
         description: c.description,
         date: formatDate(c.date, language),
         categoryOrKind: c.kind,
+      })),
+      ...examinations.map(ex => ({
+        id: ex.id,
+        type: 'examination' as const,
+        title: ex.title,
+        description: ex.description,
+        date: formatDate(ex.date, language),
+        categoryOrKind: ex.kind,
       })),
       ...diagnoses.map(d => ({
         id: d.id,
@@ -221,7 +233,7 @@ export function AiScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: colors.background }} className="flex-1">
+    <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }} className="flex-1">
       <ScreenHeader
         title={t('ai.screenTitle')}
         right={
@@ -237,7 +249,7 @@ export function AiScreen() {
         }
       />
 
-      <KeyboardLiftView>
+      <KeyboardLiftView fullBottom>
         {loading ? (
           <Loading />
         ) : (
@@ -261,13 +273,14 @@ export function AiScreen() {
               </View>
 
               <Text style={{ color: colors.textMuted }} className="mt-3 text-sm leading-5">
-                {`${patientFullName(patient) || t('ai.notSelected')} (${data?.complaints.length ?? 0} ${t('ai.complaints')}, ${data?.diagnoses.length ?? 0} ${t('ai.diagnoses')}, ${data?.treatments.length ?? 0} ${t('ai.treatments')}${data?.appointments?.length ? `, ${data.appointments.length} ${t('ai.appointments')}` : ''})`}
+                {`${patientFullName(patient) || t('ai.notSelected')} (${data?.complaints.length ?? 0} ${t('ai.complaints')}, ${data?.examinations.length ?? 0} ${t('ai.examinations')}, ${data?.diagnoses.length ?? 0} ${t('ai.diagnoses')}, ${data?.treatments.length ?? 0} ${t('ai.treatments')}${data?.appointments?.length ? `, ${data.appointments.length} ${t('ai.appointments')}` : ''})`}
               </Text>
 
               {/* Quick AI Action Prompt Chips */}
               <View className="mt-3 flex-row flex-wrap gap-2">
                 {[
                   { text: t('ai.prompt1') },
+                  { text: t('ai.promptExam') },
                   { text: t('ai.prompt2') },
                   { text: t('ai.prompt3') },
                   { text: t('ai.prompt4') },
@@ -295,6 +308,13 @@ export function AiScreen() {
                   icon={FileText}
                   tint="blue"
                   items={data.complaints}
+                  language={language}
+                />
+                <SummarySection
+                  title={t('ai.recentExaminations')}
+                  icon={FlaskConical}
+                  tint="purple"
+                  items={data.examinations}
                   language={language}
                 />
                 <SummarySection
@@ -377,8 +397,13 @@ export function AiScreen() {
 
         {/* Bottom Chat Input Bar */}
         <View
-          style={{ backgroundColor: colors.surface, borderTopColor: colors.border }}
-          className="flex-row items-center border-t px-4 py-2.5">
+          style={{
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            paddingTop: 10,
+            paddingBottom: Math.max(insets.bottom, 10),
+          }}
+          className="flex-row items-center border-t px-4">
           <TextInput
             value={question}
             onChangeText={setQuestion}
@@ -495,7 +520,7 @@ function SummarySection({
 }: {
   title: string;
   icon: typeof FileText;
-  tint: 'blue' | 'green' | 'orange';
+  tint: 'blue' | 'purple' | 'green' | 'orange';
   items: RecordItem[];
   language?: string;
 }) {
@@ -509,15 +534,25 @@ function SummarySection({
         <IconTile icon={icon} tint={tint} size={32} variant="soft" />
         <Text style={{ color: colors.text }} className="ml-2.5 text-sm font-bold">{title}</Text>
       </View>
-      {items.slice(0, 3).map(i => (
-        <View key={i.id} style={{ borderTopColor: colors.border }} className="mt-1.5 border-t pt-1.5">
-          <Text style={{ color: colors.text }} className="text-sm font-medium">{i.title}</Text>
-          <Text style={{ color: colors.textMuted }} className="text-xs">
-            {formatDate(i.date, language)}
-            {i.description ? ` • ${i.description}` : ''}
-          </Text>
-        </View>
-      ))}
+      {items.slice(0, 3).map(i => {
+        const descTrimmed = i.description?.trim() || '';
+        const titleTrimmed = i.title?.trim() || '';
+        const extraDesc =
+          descTrimmed && descTrimmed !== titleTrimmed
+            ? descTrimmed.startsWith(titleTrimmed)
+              ? descTrimmed.slice(titleTrimmed.length).trim()
+              : descTrimmed
+            : '';
+        return (
+          <View key={i.id} style={{ borderTopColor: colors.border }} className="mt-1.5 border-t pt-1.5">
+            <Text style={{ color: colors.text }} className="text-sm font-medium">{i.title}</Text>
+            <Text style={{ color: colors.textMuted }} className="text-xs">
+              {formatDate(i.date, language)}
+              {extraDesc ? ` • ${extraDesc}` : ''}
+            </Text>
+          </View>
+        );
+      })}
     </Card>
   );
 }

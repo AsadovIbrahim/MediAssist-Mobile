@@ -43,10 +43,24 @@ export const authApi = {
   me: () => http.get<CurrentUser>('auth/me'),
 };
 
+export const SYSTEM_WORKSPACE_FIRST_NAME = '__MEDIASSIST__';
+export const SYSTEM_WORKSPACE_LAST_NAME = '__DOCTOR_STORAGE__';
+
+export function isSystemWorkspacePatient(
+  p: Pick<Patient, 'firstName' | 'lastName'> | null | undefined,
+): boolean {
+  return (
+    !!p &&
+    p.firstName === SYSTEM_WORKSPACE_FIRST_NAME &&
+    p.lastName === SYSTEM_WORKSPACE_LAST_NAME
+  );
+}
+
 export const patientsApi = {
   list: async (search?: string): Promise<Patient[]> => {
     try {
-      const remote = await http.get<Patient[]>('patients', { search });
+      const remoteRaw = await http.get<Patient[]>('patients', { search });
+      const remote = remoteRaw.filter(p => !isSystemWorkspacePatient(p));
       const queue = await offlineStorage.getQueue();
       const pendingIds = new Set(
         queue
@@ -55,7 +69,9 @@ export const patientsApi = {
           .filter(Boolean),
       );
 
-      const cached = await offlineStorage.getPatients();
+      const cached = (await offlineStorage.getPatients())?.filter(
+        p => !isSystemWorkspacePatient(p),
+      );
       const localPending = (cached || []).filter(
         p => p.id.startsWith('local_p_') && pendingIds.has(p.id),
       );
@@ -97,7 +113,9 @@ export const patientsApi = {
       return merged;
     } catch (e: any) {
       if (e?.status === 0 || !e?.status) {
-        const cached = await offlineStorage.getPatients();
+        const cached = (await offlineStorage.getPatients())?.filter(
+          p => !isSystemWorkspacePatient(p),
+        );
         if (cached) {
           if (search) {
             const s = search.toLowerCase();

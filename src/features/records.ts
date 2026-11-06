@@ -197,44 +197,52 @@ async function cachedCreate(
   creator: () => Promise<RecordItem>,
   files?: LocalFile[],
 ): Promise<RecordItem> {
+  const saveLocally = async () => {
+    const localFiles: FileItem[] = (files || []).map((f, idx) => ({
+      id: `local_file_${Date.now()}_${idx}`,
+      fileName: f.name,
+      filePath: f.uri,
+      fileSize: f.size || 0,
+      type: f.type.startsWith('image/')
+        ? 'Image'
+        : f.type.startsWith('audio/')
+        ? 'VoiceRecording'
+        : 'Document',
+    }));
+    const localId = `local_${kind}_${Date.now()}`;
+    const localItem: RecordItem = {
+      id: localId,
+      title: dto.title,
+      description: dto.description,
+      kind: dto.kind,
+      date: dto.date || new Date().toISOString(),
+      files: localFiles,
+    };
+    const cached = (await offlineStorage.getRecords(patientId, kind)) || [];
+    await offlineStorage.saveRecords(patientId, kind, [localItem, ...cached]);
+    await offlineStorage.enqueue({
+      type: 'create_record',
+      recordKind: kind,
+      recordId: localId,
+      patientId,
+      payload: dto,
+      files,
+    });
+    return localItem;
+  };
+
+  if (patientId.startsWith('local_')) {
+    return saveLocally();
+  }
+
   try {
     const created = await creator();
     const cached = (await offlineStorage.getRecords(patientId, kind)) || [];
     await offlineStorage.saveRecords(patientId, kind, [created, ...cached]);
     return created;
   } catch (e: any) {
-    if (e?.status === 0 || !e?.status) {
-      const localFiles: FileItem[] = (files || []).map((f, idx) => ({
-        id: `local_file_${Date.now()}_${idx}`,
-        fileName: f.name,
-        filePath: f.uri,
-        fileSize: f.size || 0,
-        type: f.type.startsWith('image/')
-          ? 'Image'
-          : f.type.startsWith('audio/')
-          ? 'VoiceRecording'
-          : 'Document',
-      }));
-      const localId = `local_${kind}_${Date.now()}`;
-      const localItem: RecordItem = {
-        id: localId,
-        title: dto.title,
-        description: dto.description,
-        kind: dto.kind,
-        date: dto.date || new Date().toISOString(),
-        files: localFiles,
-      };
-      const cached = (await offlineStorage.getRecords(patientId, kind)) || [];
-      await offlineStorage.saveRecords(patientId, kind, [localItem, ...cached]);
-      await offlineStorage.enqueue({
-        type: 'create_record',
-        recordKind: kind,
-        recordId: localId,
-        patientId,
-        payload: dto,
-        files,
-      });
-      return localItem;
+    if (e?.status === 0 || !e?.status || e?.status >= 500) {
+      return saveLocally();
     }
     throw e;
   }
@@ -247,39 +255,47 @@ async function cachedUpdate(
   updater: () => Promise<RecordItem>,
   files?: LocalFile[],
 ): Promise<RecordItem> {
+  const updateLocally = async () => {
+    const localFiles: FileItem[] = (files || []).map((f, idx) => ({
+      id: `local_file_${Date.now()}_${idx}`,
+      fileName: f.name,
+      filePath: f.uri,
+      fileSize: f.size || 0,
+      type: f.type.startsWith('image/')
+        ? 'Image'
+        : f.type.startsWith('audio/')
+        ? 'VoiceRecording'
+        : 'Document',
+    }));
+    await offlineStorage.enqueue({
+      type: 'update_record',
+      recordKind: kind,
+      recordId: id,
+      payload: dto,
+      files,
+    });
+    const cached = await offlineStorage.findRecord(id);
+    const updatedItem: RecordItem = {
+      id,
+      title: dto.title,
+      description: dto.description,
+      kind: dto.kind,
+      date: dto.date || new Date().toISOString(),
+      files: [...(cached?.files || []), ...localFiles],
+    };
+    await offlineStorage.updateRecordInCache(id, updatedItem);
+    return updatedItem;
+  };
+
+  if (id.startsWith('local_')) {
+    return updateLocally();
+  }
+
   try {
     return await updater();
   } catch (e: any) {
-    if (e?.status === 0 || !e?.status) {
-      const localFiles: FileItem[] = (files || []).map((f, idx) => ({
-        id: `local_file_${Date.now()}_${idx}`,
-        fileName: f.name,
-        filePath: f.uri,
-        fileSize: f.size || 0,
-        type: f.type.startsWith('image/')
-          ? 'Image'
-          : f.type.startsWith('audio/')
-          ? 'VoiceRecording'
-          : 'Document',
-      }));
-      await offlineStorage.enqueue({
-        type: 'update_record',
-        recordKind: kind,
-        recordId: id,
-        payload: dto,
-        files,
-      });
-      const cached = await offlineStorage.findRecord(id);
-      const updatedItem: RecordItem = {
-        id,
-        title: dto.title,
-        description: dto.description,
-        kind: dto.kind,
-        date: dto.date || new Date().toISOString(),
-        files: [...(cached?.files || []), ...localFiles],
-      };
-      await offlineStorage.updateRecordInCache(id, updatedItem);
-      return updatedItem;
+    if (e?.status === 0 || !e?.status || e?.status >= 500) {
+      return updateLocally();
     }
     throw e;
   }

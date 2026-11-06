@@ -31,6 +31,8 @@ export type RootStackParamList = {
   Ai: undefined;
   Patients: undefined;
   PatientForm: { id?: string } | undefined;
+  Notes: undefined;
+  Folder: { folderId?: string } | undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<

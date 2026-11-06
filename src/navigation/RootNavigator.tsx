@@ -20,7 +20,9 @@ import {
 } from '../screens/AuthScreens';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { DocumentsScreen } from '../screens/DocumentsScreen';
+import { FolderScreen } from '../screens/FolderScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { NotesScreen } from '../screens/NotesScreen';
 import { PatientDashboardScreen } from '../screens/PatientDashboardScreen';
 import { PatientFormScreen } from '../screens/PatientFormScreen';
 import { PatientsScreen } from '../screens/PatientsScreen';
@@ -157,6 +159,8 @@ export function RootNavigator() {
             <Stack.Screen name="Ai" component={AiScreen} />
             <Stack.Screen name="Patients" component={PatientsScreen} />
             <Stack.Screen name="PatientForm" component={PatientFormScreen} />
+            <Stack.Screen name="Notes" component={NotesScreen} />
+            <Stack.Screen name="Folder" component={FolderScreen} />
           </>
         )}
       </Stack.Navigator>

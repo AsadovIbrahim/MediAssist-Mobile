@@ -22,7 +22,7 @@ import {
   SearchBar,
 } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
-import { usePatient } from '../context/PatientContext';
+import { patientFullName, usePatient } from '../context/PatientContext';
 import { localizeRecordTitle, RECORDS, type RecordKind } from '../features/records';
 import { useTheme } from '../context/ThemeContext';
 import { formatDate, formatSize } from '../utils/format';
@@ -80,7 +80,7 @@ export function DocumentsScreen() {
             RECORDS.diagnosis.api.list(p.id).catch(() => []),
             RECORDS.treatment.api.list(p.id).catch(() => []),
           ]);
-          const fullName = `${p.firstName} ${p.lastName}`.trim();
+          const fullName = patientFullName(p);
           const collect = (kind: RecordKind, items: typeof complaints) => {
             for (const rec of items) {
               for (const f of rec.files ?? []) {

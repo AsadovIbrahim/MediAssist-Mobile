@@ -46,7 +46,7 @@ export async function stopAudio() {
   setState({ uri: null, playing: false, position: 0, duration: 0 });
 }
 
-export async function toggleAudio(uri: string) {
+export async function toggleAudio(uri: string, fallbackUri?: string) {
   if (state.uri === uri) {
     try {
       if (state.playing) {
@@ -79,6 +79,12 @@ export async function toggleAudio(uri: string) {
   try {
     await Sound.startPlayer(uri);
   } catch (e) {
+    if (fallbackUri && fallbackUri !== uri) {
+      try {
+        await Sound.startPlayer(fallbackUri);
+        return;
+      } catch {}
+    }
     await stopAudio();
     throw e;
   }

@@ -292,10 +292,12 @@ export function Waveform({ seed, progress }: { seed: string; progress: number })
 
 export function VoicePlayer({
   uri,
+  fallbackUri,
   fallbackLabel,
   durationMs,
 }: {
   uri: string | undefined;
+  fallbackUri?: string;
   fallbackLabel?: string;
   durationMs?: number;
 }) {
@@ -307,7 +309,7 @@ export function VoicePlayer({
       return;
     }
     try {
-      await toggleAudio(uri);
+      await toggleAudio(uri, fallbackUri);
     } catch (e) {
       Alert.alert('Xəta', `Səs faylı oxunmadı: ${(e as Error).message}`);
     }
@@ -422,6 +424,8 @@ export function RecorderModal({
     }
     try {
       await stopAudio();
+      await Sound.stopRecorder().catch(() => {});
+      Sound.removeRecordBackListener();
       Sound.addRecordBackListener(e => {
         elapsedRef.current = e.currentPosition;
         setElapsed(e.currentPosition);

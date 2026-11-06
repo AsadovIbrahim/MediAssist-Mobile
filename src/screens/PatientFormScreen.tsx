@@ -26,8 +26,12 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
   const existing = patients.find(p => p.id === editId);
 
   const [firstName, setFirstName] = useState(existing?.firstName ?? '');
-  const [lastName, setLastName] = useState(existing?.lastName ?? '');
-  const [phone, setPhone] = useState(existing?.phone ?? '');
+  const [lastName, setLastName] = useState(
+    existing?.lastName && existing.lastName.trim() !== '-' ? existing.lastName : '',
+  );
+  const [phone, setPhone] = useState(
+    existing?.phone && existing.phone.trim() !== '-' ? existing.phone : '',
+  );
   const [birthYear, setBirthYear] = useState(
     existing?.dateOfBirth ? String(new Date(existing.dateOfBirth).getFullYear()) : '',
   );
@@ -38,8 +42,8 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
   useEffect(() => {
     if (existing) {
       setFirstName(existing.firstName);
-      setLastName(existing.lastName);
-      setPhone(existing.phone);
+      setLastName(existing.lastName && existing.lastName.trim() !== '-' ? existing.lastName : '');
+      setPhone(existing.phone && existing.phone.trim() !== '-' ? existing.phone : '');
       setNote(existing.note ?? '');
     }
   }, [existing]);
@@ -67,7 +71,7 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
   };
 
   const onSave = async () => {
-    if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
+    if (!firstName.trim()) {
       Alert.alert(t('common.attention'), t('patient.requiredError'));
       return;
     }
@@ -81,8 +85,8 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
     try {
       const payload = {
         firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone.trim(),
+        lastName: lastName.trim() || '-',
+        phone: phone.trim() || '-',
         dateOfBirth,
         note: note.trim() || null,
       };
@@ -115,7 +119,7 @@ export function PatientFormScreen({ navigation, route }: RootScreenProps<'Patien
       <ScreenHeader title={editId ? t('patient.editPatient') : t('patient.newPatient')} />
 
       <KeyboardScrollView className="flex-1 px-4 pt-3">
-        <View className="mb-6 items-center self-center">
+        <View className="mt-2 mb-6 items-center self-center">
           <Pressable onPress={choosePhoto} className="items-center">
             {previewUri ? (
               <Image

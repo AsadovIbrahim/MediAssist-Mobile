@@ -145,14 +145,20 @@ export function KeyboardScrollView({
 export function KeyboardLiftView({
   children,
   className = '',
+  fullBottom = false,
 }: {
   children: React.ReactNode;
   className?: string;
+  fullBottom?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const { keyboardHeight } = useKeyboard();
   const bottomOffset =
-    keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0;
+    keyboardHeight > 0
+      ? fullBottom
+        ? keyboardHeight
+        : Math.max(0, keyboardHeight - insets.bottom)
+      : 0;
 
   return (
     <View style={{ paddingBottom: bottomOffset }} className={`flex-1 ${className}`}>

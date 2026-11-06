@@ -23,7 +23,7 @@ export interface AiPatientContext {
 
 export interface AiRecordItem {
   id: string;
-  type: 'complaint' | 'diagnosis' | 'treatment' | 'appointment';
+  type: 'complaint' | 'examination' | 'diagnosis' | 'treatment' | 'appointment';
   title: string;
   description?: string | null;
   date: string;
@@ -158,6 +158,7 @@ function buildClinicalPrompt(
   }
 
   const complaints = records.filter(r => r.type === 'complaint');
+  const examinations = records.filter(r => r.type === 'examination');
   const diagnoses = records.filter(r => r.type === 'diagnosis');
   const treatments = records.filter(r => r.type === 'treatment');
   const appointments = records.filter(r => r.type === 'appointment');
@@ -168,6 +169,15 @@ function buildClinicalPrompt(
   } else {
     complaints.forEach((c, idx) => {
       lines.push(`${idx + 1}. [${c.date}] ${c.title}${c.description ? ` — ${c.description}` : ''}`);
+    });
+  }
+
+  lines.push(`\n--- MÜAYİNƏLƏR VƏ ANALİZLƏR (${examinations.length}) ---`);
+  if (!examinations.length) {
+    lines.push('Qeydə alınmış müayinə yoxdur.');
+  } else {
+    examinations.forEach((ex, idx) => {
+      lines.push(`${idx + 1}. [${ex.date}] ${ex.title}${ex.description ? ` — ${ex.description}` : ''}`);
     });
   }
 
@@ -418,6 +428,7 @@ export function runLocalClinicalEngine(
   const patientName = patient?.name || defaultPatientName;
 
   const complaints = records.filter(r => r.type === 'complaint');
+  const examinations = records.filter(r => r.type === 'examination');
   const diagnoses = records.filter(r => r.type === 'diagnosis');
   const treatments = records.filter(r => r.type === 'treatment');
   const appointments = records.filter(r => r.type === 'appointment');
@@ -429,12 +440,12 @@ export function runLocalClinicalEngine(
 
   if (isGreeting) {
     if (isRu) {
-      return `👋 **Здравствуйте! Я клинический ассистент MediAssist.**\n\nДля пациента **${patientName}** я могу:\n• Обобщить последние жалобы и симптомы\n• Проверить активный план лечения и дозировки препаратов\n• Проанализировать установленные диагнозы\n• Оценить общее клиническое состояние и дать рекомендации\n\nВы можете нажать на одну из кнопок выше или написать свой вопрос.`;
+      return `👋 **Здравствуйте! Я клинический ассистент MediAssist.**\n\nДля пациента **${patientName}** я могу:\n• Обобщить последние жалобы и симптомы\n• Проанализировать результаты обследований и анализов\n• Проверить активный план лечения и дозировки препаратов\n• Проанализировать установленные диагнозы\n• Оценить общее клиническое состояние и дать рекомендации\n\nВы можете нажать на одну из кнопок выше или написать свой вопрос.`;
     }
     if (isEn) {
-      return `👋 **Hello! I am your MediAssist clinical AI assistant.**\n\nFor **${patientName}**, I can:\n• Summarize recent complaints and symptoms\n• Review the active treatment and medication regimen\n• Analyze confirmed diagnoses\n• Provide an overall clinical evaluation and recommendations\n\nFeel free to tap any of the quick action buttons above or type your question.`;
+      return `👋 **Hello! I am your MediAssist clinical AI assistant.**\n\nFor **${patientName}**, I can:\n• Summarize recent complaints and symptoms\n• Analyze examination and laboratory results\n• Review the active treatment and medication regimen\n• Analyze confirmed diagnoses\n• Provide an overall clinical evaluation and recommendations\n\nFeel free to tap any of the quick action buttons above or type your question.`;
     }
-    return `👋 **Salam! Mən MediAssist kliniki süni intellekt köməkçisiyəm.**\n\n**${patientName}** üçün:\n• Son şikayətləri xülasə edə,\n• Aktiv müalicə və dərman rejimini yoxlaya,\n• Qoyulmuş diaqnozları təhlil edə,\n• Ümumi kliniki vəziyyəti qiymətləndirib tövsiyələr verə bilərəm.\n\nYuxarıdakı hazır düymələrdən birinə toxuna və ya sualınızı yaza bilərsiniz.`;
+    return `👋 **Salam! Mən MediAssist kliniki süni intellekt köməkçisiyəm.**\n\n**${patientName}** üçün:\n• Son şikayətləri xülasə edə,\n• Müayinə və analiz nəticələrini təhlil edə,\n• Aktiv müalicə və dərman rejimini yoxlaya,\n• Qoyulmuş diaqnozları təhlil edə,\n• Ümumi kliniki vəziyyəti qiymətləndirib tövsiyələr verə bilərəm.\n\nYuxarıdakı hazır düymələrdən birinə toxuna və ya sualınızı yaza bilərsiniz.`;
   }
 
   const isComplaintQuery =
@@ -447,9 +458,14 @@ export function runLocalClinicalEngine(
     q.includes('лечени') || q.includes('лекарств') || q.includes('рецепт') || q.includes('препарат') || q.includes('таблетк') ||
     q.includes('treatment') || q.includes('medication') || q.includes('medicine') || q.includes('prescription') || q.includes('drug');
 
+  const isExaminationQuery =
+    q.includes('müayinə') || q.includes('muayine') || q.includes('analiz') || q.includes('usm') || q.includes('rentgen') || q.includes('mrt') || q.includes('kt') || q.includes('laborator') ||
+    q.includes('обследован') || q.includes('анализ') || q.includes('узи') || q.includes('рентген') || q.includes('мрт') || q.includes('кт') ||
+    q.includes('examination') || q.includes('lab') || q.includes('scan') || q.includes('xray') || q.includes('ultrasound');
+
   const isDiagnosisQuery =
-    q.includes('diaqnoz') || q.includes('nəticə') || q.includes('analiz') ||
-    q.includes('диагноз') || q.includes('результат') || q.includes('анализ') || q.includes('заключени') ||
+    q.includes('diaqnoz') || q.includes('nəticə') ||
+    q.includes('диагноз') || q.includes('результат') || q.includes('заключени') ||
     q.includes('diagnosis') || q.includes('result') || q.includes('finding') || q.includes('test');
 
   const isCalendarQuery =
@@ -488,6 +504,39 @@ export function runLocalClinicalEngine(
       return `🩺 **Patient Complaints Clinical Summary:**\n\n${list}\n\n💡 **Clinical Note:** It is recommended to monitor symptom dynamics and correlation with diagnostic findings.`;
     }
     return `🩺 **Pasiyentin Şikayətlər Xülasəsi:**\n\n${list}\n\n💡 **Kliniki Qeyd:** Şikayətlərin inkişaf dinamikasını izləmək və diaqnozla uyğunluğunu yoxlamaq tövsiyə olunur.`;
+  }
+
+  if (isExaminationQuery) {
+    if (!examinations.length) {
+      if (isRu) {
+        return `🧪 Для пациента **${patientName}** записей обследований или лабораторных анализов пока нет.\n\n• Вы можете добавить анализы крови, УЗИ, рентген или другие документы в разделе «Обследования».`;
+      }
+      if (isEn) {
+        return `🧪 No examination or laboratory records found for **${patientName}** yet.\n\n• You can add lab tests, ultrasound, X-ray, or other documents in the Examinations section.`;
+      }
+      return `🧪 **${patientName}** üçün hələ heç bir müayinə və ya analiz nəticəsi qeydə alınmayıb.\n\n• Müayinələr bölməsindən qan analizi, USM, rentgen və digər müayinə sənədlərini əlavə edə bilərsiniz.`;
+    }
+
+    const list = examinations
+      .map((ex, i) => {
+        const title = localizeRecordTitle(ex.title, isEn, isRu);
+        if (isRu) {
+          return `**${i + 1}. ${title}** (${ex.date})\n${ex.description ? `   • Результат / Заметка: ${ex.description}` : '   • Прикрепленный документ / файл обследования.'}`;
+        }
+        if (isEn) {
+          return `**${i + 1}. ${title}** (${ex.date})\n${ex.description ? `   • Result / Note: ${ex.description}` : '   • Attached examination document / file.'}`;
+        }
+        return `**${i + 1}. ${title}** (${ex.date})\n${ex.description ? `   • Nəticə / Qeyd: ${ex.description}` : '   • Müayinə sənədi / faylı əlavə olunub.'}`;
+      })
+      .join('\n\n');
+
+    if (isRu) {
+      return `🧪 **Результаты обследований и анализов:**\n\n${list}\n\n📌 **Клиническая заметка:** Сопоставьте лабораторные и инструментальные показатели с клинической картиной пациента.`;
+    }
+    if (isEn) {
+      return `🧪 **Examination and Laboratory Findings:**\n\n${list}\n\n📌 **Clinical Note:** Correlate laboratory and imaging findings with the patient's clinical presentation.`;
+    }
+    return `🧪 **Müayinə və Analiz Nəticələri:**\n\n${list}\n\n📌 **Kliniki Qeyd:** Laborator və instrumental müayinə göstəricilərinin şikayət və diaqnozla uyğunluğunu nəzarətdə saxlayın.`;
   }
 
   if (isTreatmentQuery) {
@@ -589,6 +638,7 @@ export function runLocalClinicalEngine(
       `👨‍⚕️ **${patientName} — Общий клинический анализ состояния:**`,
       '',
       `• **Жалобы:** ${complaints.length > 0 ? `${complaints.length} зап. (${complaints.map(c => localizeRecordTitle(c.title, isEn, isRu)).slice(0, 2).join(', ')})` : 'Записей нет'}`,
+      `• **Обследования:** ${examinations.length > 0 ? `${examinations.length} зап. (${examinations.map(ex => localizeRecordTitle(ex.title, isEn, isRu)).slice(0, 2).join(', ')})` : 'Записей нет'}`,
       `• **Диагнозы:** ${diagnoses.length > 0 ? diagnoses.map(d => localizeRecordTitle(d.title, isEn, isRu)).join(', ') : 'Не установлены'}`,
       `• **Лечение:** ${treatments.length > 0 ? treatments.map(t => localizeRecordTitle(t.title, isEn, isRu)).join(', ') : 'Не назначено'}`,
       `• **Визиты:** ${appointments.length > 0 ? `${localizeRecordTitle(appointments[0].title, isEn, isRu)} (${appointments[0].date})` : 'Не запланированы'}`,
@@ -596,7 +646,7 @@ export function runLocalClinicalEngine(
       '📌 **Клинические рекомендации:**',
     ];
 
-    if (!diagnoses.length && complaints.length > 0) {
+    if (!examinations.length && complaints.length > 0) {
       lines.push('1. Назначение первичных лабораторно-диагностических исследований по текущим жалобам.');
     }
     if (diagnoses.length > 0 && !treatments.length) {
@@ -605,7 +655,7 @@ export function runLocalClinicalEngine(
     if (!appointments.length) {
       lines.push('3. Внесение даты контрольного приема в календарь для оценки эффективности терапии.');
     }
-    if (lines.length <= 8) {
+    if (lines.length <= 9) {
       lines.push('1. Контроль текущего режима и общего самочувствия пациента.');
       lines.push('2. Плановый осмотр и лабораторный контроль при необходимости.');
     }
@@ -617,6 +667,7 @@ export function runLocalClinicalEngine(
       `👨‍⚕️ **${patientName} — General Clinical Assessment:**`,
       '',
       `• **Complaints:** ${complaints.length > 0 ? `${complaints.length} records (${complaints.map(c => localizeRecordTitle(c.title, isEn, isRu)).slice(0, 2).join(', ')})` : 'None recorded'}`,
+      `• **Examinations:** ${examinations.length > 0 ? `${examinations.length} records (${examinations.map(ex => localizeRecordTitle(ex.title, isEn, isRu)).slice(0, 2).join(', ')})` : 'None recorded'}`,
       `• **Diagnoses:** ${diagnoses.length > 0 ? diagnoses.map(d => localizeRecordTitle(d.title, isEn, isRu)).join(', ') : 'None assigned'}`,
       `• **Treatments:** ${treatments.length > 0 ? treatments.map(t => localizeRecordTitle(t.title, isEn, isRu)).join(', ') : 'None prescribed'}`,
       `• **Appointments:** ${appointments.length > 0 ? `${localizeRecordTitle(appointments[0].title, isEn, isRu)} (${appointments[0].date})` : 'None scheduled'}`,
@@ -624,7 +675,7 @@ export function runLocalClinicalEngine(
       '📌 **Clinical Recommendations:**',
     ];
 
-    if (!diagnoses.length && complaints.length > 0) {
+    if (!examinations.length && complaints.length > 0) {
       lines.push('1. Schedule primary diagnostic and laboratory tests matching current complaints.');
     }
     if (diagnoses.length > 0 && !treatments.length) {
@@ -633,7 +684,7 @@ export function runLocalClinicalEngine(
     if (!appointments.length) {
       lines.push('3. Record a follow-up visit in the calendar to assess treatment efficacy.');
     }
-    if (lines.length <= 8) {
+    if (lines.length <= 9) {
       lines.push('1. Monitor current lifestyle and patient adherence.');
       lines.push('2. Routine follow-up review as needed.');
     }
@@ -645,6 +696,7 @@ export function runLocalClinicalEngine(
     `👨‍⚕️ **${patientName} — Tibbi Vəziyyətin Ümumi Analizi:**`,
     '',
     `• **Şikayətlər:** ${complaints.length > 0 ? `${complaints.length} qeyd (${complaints.map(c => c.title).slice(0, 2).join(', ')})` : 'Qeyd yoxdur'}`,
+    `• **Müayinələr:** ${examinations.length > 0 ? `${examinations.length} qeyd (${examinations.map(ex => ex.title).slice(0, 2).join(', ')})` : 'Qeyd yoxdur'}`,
     `• **Diaqnozlar:** ${diagnoses.length > 0 ? diagnoses.map(d => d.title).join(', ') : 'Qoyulmayıb'}`,
     `• **Müalicə:** ${treatments.length > 0 ? treatments.map(t => t.title).join(', ') : 'Təyin edilməyib'}`,
     `• **Görüşlər:** ${appointments.length > 0 ? `${appointments[0].title} (${appointments[0].date})` : 'Təyin edilməyib'}`,
@@ -652,7 +704,7 @@ export function runLocalClinicalEngine(
     '📌 **Kliniki Tövsiyələr:**',
   ];
 
-  if (!diagnoses.length && complaints.length > 0) {
+  if (!examinations.length && complaints.length > 0) {
     lines.push('1. Mövcud şikayətlərə əsasən ilkin laborator-diaqnostik müayinələrin aparılması.');
   }
   if (diagnoses.length > 0 && !treatments.length) {
@@ -661,7 +713,7 @@ export function runLocalClinicalEngine(
   if (!appointments.length) {
     lines.push('3. Müalicənin effektivliyini qiymətləndirmək üçün təkrar qəbul tarixinin təqvimdə qeyd edilməsi.');
   }
-  if (lines.length <= 8) {
+  if (lines.length <= 9) {
     lines.push('1. Pasiyentin cari rejimini və həyat tərzini nəzarətdə saxlamaq.');
     lines.push('2. Zəruri hallarda planlı təkrar müayinə təyin etmək.');
   }

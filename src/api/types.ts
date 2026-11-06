@@ -152,11 +152,19 @@ export interface CurrentUser {
 /** A local file chosen on the device, waiting to be uploaded. */
 export interface LocalFile {
   uri: string;
+  /** Original on-device file:// or content:// URI kept for offline viewing/playback. */
+  localUri?: string;
   name: string;
   type: string;
   size?: number;
   /** Duration in ms (voice recordings only). */
   durationMs?: number;
   kind: 'image' | 'audio' | 'document';
+  /** Server file ID once synced to the backend. */
+  serverFileId?: string;
+  /** Server parent record ID that owns this uploaded file. */
+  serverRecordId?: string;
+  /** Which endpoint bucket stores this file on the backend. */
+  serverBucket?: 'complaint' | 'diagnosis';
 }
 

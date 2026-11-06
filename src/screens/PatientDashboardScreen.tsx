@@ -29,7 +29,7 @@ import { ImageViewer } from '../components/media';
 import { OfflineBanner } from '../components/OfflineBanner';
 import { Button, EmptyState, ErrorBanner, IconTile } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
-import { patientFullName, usePatient } from '../context/PatientContext';
+import { patientDisplayPhone, patientFullName, usePatient } from '../context/PatientContext';
 import { useTheme } from '../context/ThemeContext';
 import { type TintName } from '../theme';
 import { useFocusData } from '../utils/hooks';
@@ -263,10 +263,16 @@ export function PatientDashboardScreen() {
             <Text style={{ color: colors.text }} className="mt-2.5 text-center text-[22px] font-bold">
               {patientFullName(patient)}
             </Text>
-            <Text style={{ color: colors.textMuted }} className="mt-0.5 text-center text-[15px] font-medium">
-              {patient.phone}
-              {patient.age ? ` • ${patient.age} ${t('home.ageSuffix')}` : ''}
-            </Text>
+            {(patientDisplayPhone(patient.phone) || patient.age) ? (
+              <Text style={{ color: colors.textMuted }} className="mt-0.5 text-center text-[15px] font-medium">
+                {[
+                  patientDisplayPhone(patient.phone),
+                  patient.age ? `${patient.age} ${t('home.ageSuffix')}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' • ')}
+              </Text>
+            ) : null}
           </View>
         )}
 

@@ -13,7 +13,7 @@ import {
   SearchBar,
 } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
-import { usePatient } from '../context/PatientContext';
+import { patientFullName, usePatient } from '../context/PatientContext';
 import { useTheme } from '../context/ThemeContext';
 import { RECORDS, type RecordItem, type RecordKind } from '../features/records';
 import { useDebounced, useFocusData } from '../utils/hooks';
@@ -58,7 +58,7 @@ export function SearchScreen() {
     await Promise.all(
       targetList.map(async p => {
         try {
-          const pName = `${p.firstName} ${p.lastName}`.trim();
+          const pName = patientFullName(p);
           const [complaints, examinations, diagnoses, treatments] = await Promise.all([
             RECORDS.complaint.api.list(p.id).catch(() => []),
             RECORDS.examination.api.list(p.id).catch(() => []),

@@ -14,6 +14,7 @@ import type {
   RegisterOtpResponse,
 } from '../api/types';
 import { DEFAULT_API_URL } from '../config';
+import { resetWorkspaceMemoryCache } from '../features/doctorWorkspace';
 import { storage } from '../utils/storage';
 
 interface AuthContextValue {
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    resetWorkspaceMemoryCache();
     await applySession(null);
     await storage.setPatientId(null);
   }, [applySession]);

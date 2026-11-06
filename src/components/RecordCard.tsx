@@ -46,11 +46,17 @@ export function RecordCard({
   // Hide title if this is a file record with a generic default title
   const showTitle = hasFiles ? !isGenericTitle : true;
 
-  const isSameAsTitle =
-    !item.description ||
-    item.description.trim().toLowerCase() === item.title.trim().toLowerCase();
+  const rawDesc = (item.description ?? '').trim();
+  const rawTitle = (item.title ?? '').trim();
+  const cleanTitlePrefix = rawTitle.replace(/\.\.\.$/, '').trim();
+  const extraDescription =
+    rawDesc && rawDesc.toLowerCase() !== rawTitle.toLowerCase()
+      ? rawDesc.toLowerCase().startsWith(cleanTitlePrefix.toLowerCase())
+        ? rawDesc.slice(cleanTitlePrefix.length).replace(/^[.\s\n]+/, '').trim()
+        : rawDesc
+      : '';
   const showDescription =
-    !isSameAsTitle && !images.length && !audios.length && !docs.length;
+    Boolean(extraDescription) && !images.length && !audios.length && !docs.length;
 
   return (
     <Card
@@ -90,7 +96,7 @@ export function RecordCard({
 
         {showDescription && (
           <Text style={{ color: colors.textMuted }} className="mt-2 text-[14px] leading-6" numberOfLines={2}>
-            {item.description}
+            {extraDescription}
           </Text>
         )}
         {images.length > 0 && (
